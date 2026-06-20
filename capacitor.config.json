@@ -1,0 +1,6 @@
+{
+  "appId": "com.realpal.app",
+  "appName": "RealPal",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

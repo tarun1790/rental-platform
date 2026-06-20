@@ -1,0 +1,22 @@
+# Dependency directories
+node_modules/
+
+# Production builds
+dist/
+
+# Persistent SQLite database
+server/realpal.db
+
+# Logs and environment configs
+*.log
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
