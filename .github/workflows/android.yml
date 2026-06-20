@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -35,7 +38,19 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Sync Capacitor Web Assets to Android Project
+        id: sync
         run: npx cap sync android
+
+      - name: Capture Failure Logs
+        if: failure() && steps.sync.outcome == 'failure'
+        run: |
+          npx cap sync android > sync_log.txt 2>&1 || true
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git checkout -b build-debug
+          git add sync_log.txt
+          git commit -m "Commit build failure logs [skip ci]"
+          git push -f origin build-debug
 
       - name: Compile Unsigned Release APK (For Direct Installation)
         run: |
