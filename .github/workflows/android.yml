@@ -53,9 +53,23 @@ jobs:
           git push -f origin build-debug
 
       - name: Compile Unsigned Release APK (For Direct Installation)
+        id: build_apk
         run: |
           cd android
           ./gradlew assembleRelease
+
+      - name: Capture Gradle Failure Logs
+        if: failure() && steps.build_apk.outcome == 'failure'
+        run: |
+          cd android
+          ./gradlew assembleRelease --stacktrace > ../sync_log.txt 2>&1 || true
+          cd ..
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git checkout -b build-debug
+          git add sync_log.txt
+          git commit -m "Commit Gradle compile failure logs [skip ci]"
+          git push -f origin build-debug
 
       - name: Compile Unsigned Release AAB (For Google Play Store Upload)
         run: |
