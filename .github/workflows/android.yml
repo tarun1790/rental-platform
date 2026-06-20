@@ -31,11 +31,11 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Sync Capacitor Web Assets to Android Project
-        run: npx cap sync android
-
       - name: Grant Execute Permission to Gradle Wrapper
         run: chmod +x android/gradlew
+
+      - name: Sync Capacitor Web Assets to Android Project
+        run: npx cap sync android
 
       - name: Compile Unsigned Release APK (For Direct Installation)
         run: |
