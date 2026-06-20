@@ -14,7 +14,7 @@ import FeedbackView from './components/FeedbackView'
 // NOTE FOR PLAY STORE / EMULATOR DEPLOYMENTS:
 // 1. Android Emulator: Use 'http://10.0.2.2:5000' to point to your computer's local backend.
 // 2. Production Play Store: Replace this with your public HTTPS API server URL (e.g., 'https://api.realpal.com').
-const API_BASE_URL = 'http://localhost:5000'; 
+const API_BASE_URL = 'http://192.168.1.103:5000'; 
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('landing')
