@@ -49,8 +49,8 @@ export async function initDb() {
   // Detect and perform schema upgrade if properties table is outdated
   try {
     const tableInfo = await dbQuery.all("PRAGMA table_info(properties)");
-    const hasPurchasePrice = tableInfo.some(col => col.name === 'purchasePrice');
-    if (tableInfo.length > 0 && !hasPurchasePrice) {
+    const hasMarket = tableInfo.some(col => col.name === 'market');
+    if (tableInfo.length > 0 && !hasMarket) {
       console.log('Detected outdated properties schema. Upgrading database...');
       await dbQuery.run('DROP TABLE IF EXISTS properties');
       await dbQuery.run('DROP TABLE IF EXISTS reminders');
@@ -71,7 +71,7 @@ export async function initDb() {
     )
   `)
 
-  // 2. Properties Table (Upgraded with ROI and Zillow-like fields)
+  // 2. Properties Table (Upgraded with ROI and Environmental fields)
   await dbQuery.run(`
     CREATE TABLE IF NOT EXISTS properties (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,7 +113,11 @@ export async function initDb() {
       mallsNearby TEXT,
       forestPreserves TEXT,
       latitude REAL,
-      longitude REAL
+      longitude REAL,
+      market TEXT,
+      units INTEGER,
+      valueAddPotential TEXT,
+      dealStatus TEXT
     )
   `)
 
@@ -208,42 +212,91 @@ export async function initDb() {
         schoolElementary, schoolMiddle, schoolHigh, airQualityIndex, fireRisk, soilType, mallsNearby, forestPreserves,
         latitude, longitude
       ) VALUES
-      (1, '1208 Whispering Pines Dr, San Jose, CA 94043', 'Single Family', 3200, 'John Herman', 'john.herman@gmail.com', '2025-01-01', '2026-12-31', 'Occupied',
+      (1, '1422 N La Salle Dr, Chicago, IL 60610', 'Single Family', 3100, 'John Herman', 'john.herman@gmail.com', '2025-01-01', '2026-12-31', 'Occupied',
        320000, 25, 7.0, 30, 6000, 20000,
        9000, 3, 1200, 3, 0, 3,
        2000, 3, 500, 3,
        5, 0, 3, 5, 5,
-       8.5, 9.0, 8.8, 32, 'Low', 'Clay loam, stable', 'Westfield Valley Fair, Santana Row', 'Alum Rock Park, Sierra Vista Open Space',
-       37.3382, -121.8863),
-      (2, '450 Ocean Breeze Ave, Apt 3B, Santa Monica, CA 90025', 'Apartment', 2200, 'Sarah Jenkins', 'sarah.j@outlook.com', '2025-07-01', '2026-06-30', 'Occupied',
+       8.5, 9.0, 8.8, 32, 'Low', 'Sandy clay, stable', 'Water Tower Place, 900 N Michigan', 'Lincoln Park, Oak Street Beach',
+       41.9082, -87.6322),
+      (2, '730 W Wrightwood Ave, Apt 2B, Chicago, IL 60614', 'Apartment', 2200, 'Sarah Jenkins', 'sarah.j@outlook.com', '2025-07-01', '2026-06-30', 'Occupied',
        280000, 20, 6.8, 30, 5000, 5000,
        3600, 2, 900, 2, 250, 2,
        1500, 2, 300, 2,
        4, 8, 4, 10, 6,
-       9.0, 8.5, 9.2, 45, 'Very Low', 'Sandy loam, stable', 'Santa Monica Place, Third Street Promenade', 'Santa Monica Mountains Recreation Area',
-       34.0194, -118.4912),
-      (3, '789 Summit Boulevard, Condominium 12, Seattle, WA 98101', 'Condo', 2400, 'Vacant', '-', '', '', 'Vacant',
+       9.0, 8.5, 9.2, 45, 'Very Low', 'Sandy loam, stable', 'Lincoln Common, Clark & Belmont', 'Lincoln Park Zoo',
+       41.9291, -87.6475),
+      (3, '505 N Lake Shore Dr, Condominium 3210, Chicago, IL 60611', 'Condo', 2600, 'Vacant', '-', '', '', 'Vacant',
        450000, 25, 7.2, 30, 8000, 0,
        5400, 3, 1000, 3, 350, 3,
        2000, 3, 400, 3,
        5, 10, 3.5, 7, 5,
-       8.0, 8.0, 8.5, 28, 'Low', 'Glacial till, stable', 'Pacific Place, Westlake Center', 'Discovery Park, Volunteer Park',
-       47.6062, -122.3321)
+       8.0, 8.0, 8.5, 28, 'Low', 'Clay loam, stable', 'Navy Pier, Shops at North Bridge', 'Lakefront Trail, Milton Lee Olive Park',
+       41.8914, -87.6139),
+      (4, '2111 W Division St, Chicago, IL 60622', 'Single Family', 2900, 'Vacant', '-', '', '', 'Vacant',
+       380000, 25, 7.1, 30, 6000, 10000,
+       7200, 3, 1100, 3, 0, 3,
+       1800, 3, 450, 3,
+       5, 0, 3.0, 5, 5,
+       7.8, 8.2, 8.0, 36, 'Low', 'Clay loam, stable', 'Wicker Park Plaza', 'Humboldt Park',
+       41.9034, -87.6802),
+      (5, '1224 W Adams St, Apt 4F, Chicago, IL 60607', 'Apartment', 2400, 'Michael Chang', 'mchang@gmail.com', '2025-03-01', '2026-02-28', 'Occupied',
+       300000, 25, 6.9, 30, 5500, 3000,
+       4800, 3, 950, 3, 150, 3,
+       1600, 3, 350, 3,
+       5, 0, 3.2, 5, 5,
+       8.2, 8.0, 8.4, 40, 'Low', 'Loamy silt, stable', 'West Loop Galleria', 'Mary Bartelme Park',
+       41.8794, -87.6582),
+      (6, '835 W Grand Ave, Chicago, IL 60622', 'Townhouse', 2800, 'Vacant', '-', '', '', 'Vacant',
+       340000, 25, 7.0, 30, 6000, 8000,
+       6000, 3, 1150, 3, 100, 3,
+       1700, 3, 400, 3,
+       5, 0, 3.0, 5, 5,
+       7.5, 7.8, 8.0, 35, 'Low', 'Sandy clay, stable', 'Fulton Market Gateway', 'Union Park',
+       41.8912, -87.6492),
+      (7, '1610 W Belden Ave, Chicago, IL 60614', 'Single Family', 3300, 'David Rossi', 'drossi@gmail.com', '2025-05-01', '2026-04-30', 'Occupied',
+       390000, 25, 6.8, 30, 7000, 12000,
+       8200, 3, 1250, 3, 0, 3,
+       2100, 3, 500, 3,
+       5, 0, 3.5, 5, 5,
+       9.2, 9.0, 9.5, 30, 'Low', 'Sandy loam, stable', 'Webster Place, Lincoln Common', 'Trebes Park',
+       41.9238, -87.6685),
+      (8, '2930 N Pine Grove Ave, Apt 5A, Chicago, IL 60657', 'Apartment', 2050, 'Anna Kowalski', 'akowalski@outlook.com', '2025-09-01', '2026-08-31', 'Occupied',
+       260000, 20, 6.7, 30, 4800, 2000,
+       3400, 2, 850, 2, 200, 2,
+       1400, 2, 300, 2,
+       4, 8, 4.0, 6, 5,
+       8.8, 8.5, 9.0, 42, 'Very Low', 'Sandy loam, stable', 'Lakeview Plaza, Clark & Belmont', 'Waveland Park, Belmont Harbor',
+       41.9355, -87.6415),
+      (9, '600 N Lake Shore Dr, Condo 1404, Chicago, IL 60611', 'Condo', 2700, 'Emily Taylor', 'etaylor@gmail.com', '2025-11-01', '2026-10-31', 'Occupied',
+       480000, 25, 7.3, 30, 9000, 1000,
+       5800, 3, 1100, 3, 400, 3,
+       2200, 3, 450, 3,
+       5, 10, 3.8, 8, 5,
+       8.5, 8.5, 8.8, 30, 'Low', 'Clay loam, stable', 'Navy Pier Shops, Water Tower Place', 'Lakefront Trail, Ohio Street Beach',
+       41.8931, -87.6142),
+      (10, '1845 N Halsted St, Chicago, IL 60614', 'Single Family', 3500, 'Vacant', '-', '', '', 'Vacant',
+       420000, 25, 7.0, 30, 7500, 15000,
+       9500, 3, 1300, 3, 0, 3,
+       2400, 3, 600, 3,
+       5, 0, 3.5, 5, 5,
+       9.5, 9.2, 9.5, 31, 'Low', 'Sandy clay, stable', 'Lincoln Common, Clybourn Corridor', 'Oz Park',
+       41.9158, -87.6481)
     `)
 
     // Seed Reminders
     await dbQuery.run(`
       INSERT INTO reminders (title, date, priority, category, propertyId, propertyName, completed) VALUES
-      ('Schedule annual gas safety inspection', '2026-07-15', 'High', 'Compliance', '1', '1208 Whispering Pines Dr, San Jose, CA 94043', 0),
-      ('Confirm receipt of June Rent', '2026-06-05', 'Medium', 'Rent', '2', '450 Ocean Breeze Ave, Apt 3B, Santa Monica, CA 90025', 1),
-      ('Replace furnace filters & test alarms', '2026-06-25', 'High', 'Maintenance', '1', '1208 Whispering Pines Dr, San Jose, CA 94043', 0),
+      ('Schedule annual gas safety inspection', '2026-07-15', 'High', 'Compliance', '1', '1422 N La Salle Dr, Chicago, IL 60610', 0),
+      ('Confirm receipt of June Rent', '2026-06-05', 'Medium', 'Rent', '2', '730 W Wrightwood Ave, Apt 2B, Chicago, IL 60614', 1),
+      ('Replace furnace filters & test alarms', '2026-06-25', 'High', 'Maintenance', '1', '1422 N La Salle Dr, Chicago, IL 60610', 0),
       ('Submit quarterly rental tax filings', '2026-07-31', 'Medium', 'Tax', 'General', 'General Admin', 0)
     `)
 
     // Seed Jobs
     await dbQuery.run(`
       INSERT INTO jobs (id, title, propertyId, propertyName, category, description, budget, status, datePosted, acceptedBid) VALUES
-      (1, 'Hot Water Heater Leakage', '1', '1208 Whispering Pines Dr, San Jose, CA 94043', 'Plumbing', 'Tank valve is leaking minor pooling under hot water unit. Needs inspection and fitting replacement.', 350, 'bidding', '2026-06-18', NULL)
+      (1, 'Hot Water Heater Leakage', '1', '1422 N La Salle Dr, Chicago, IL 60610', 'Plumbing', 'Tank valve is leaking minor pooling under hot water unit. Needs inspection and fitting replacement.', 350, 'bidding', '2026-06-18', NULL)
     `)
 
     // Seed Bids

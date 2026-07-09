@@ -2,18 +2,21 @@ import React, { useState, useEffect } from 'react'
 
 export default function PropertiesView({ properties, onAddProperty, onUpdateProperty, onDeleteProperty }) {
   // Navigation & Sub-tabs
-  const [activeSubTab, setActiveSubTab] = useState('portfolio') // 'portfolio' (Zillow Search Map), 'compare'
+  const [activeSubTab, setActiveSubTab] = useState('portfolio') // 'portfolio' (Map & Grid), 'spreadsheet' (Spreadsheet Log), 'compare'
   
   // Selection states
-  const [selectedPropertyId, setSelectedPropertyId] = useState(null)
   const [comparedPropertyIds, setComparedPropertyIds] = useState([])
   const [activeDetailProp, setActiveDetailProp] = useState(null)
+  const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false)
+
+  // Leaflet Map states
+  const [mapInstance, setMapInstance] = useState(null)
+  const [markers, setMarkers] = useState([])
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
   const [maxRentFilter, setMaxRentFilter] = useState('Any')
   const [propertyTypeFilter, setPropertyTypeFilter] = useState('Any')
-  const [minBedsFilter, setMinBedsFilter] = useState('Any')
 
   // Modals & Forms
   const [showAddModal, setShowAddModal] = useState(false)
@@ -52,17 +55,21 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
   const [holdingPeriodYears, setHoldingPeriodYears] = useState(5)
   const [sellingCostPercent, setSellingCostPercent] = useState(5)
 
-  // Zillow/Geographical Inputs
+  // Geographical & RealPal Columns
   const [schoolElementary, setSchoolElementary] = useState(8.5)
   const [schoolMiddle, setSchoolMiddle] = useState(9.0)
   const [schoolHigh, setSchoolHigh] = useState(8.8)
   const [airQualityIndex, setAirQualityIndex] = useState(32)
   const [fireRisk, setFireRisk] = useState('Low')
-  const [soilType, setSoilType] = useState('Clay loam, stable')
-  const [mallsNearby, setMallsNearby] = useState('Westfield Valley Fair, Santana Row')
-  const [forestPreserves, setForestPreserves] = useState('Alum Rock Park, Sierra Vista Open Space')
-  const [latitude, setLatitude] = useState(37.3382)
-  const [longitude, setLongitude] = useState(-121.8863)
+  const [soilType, setSoilType] = useState('Sandy clay, stable')
+  const [mallsNearby, setMallsNearby] = useState('Water Tower Place')
+  const [forestPreserves, setForestPreserves] = useState('Lincoln Park')
+  const [latitude, setLatitude] = useState(41.9082)
+  const [longitude, setLongitude] = useState(-87.6322)
+  const [market, setMarket] = useState('Chicago')
+  const [units, setUnits] = useState(1)
+  const [valueAddPotential, setValueAddPotential] = useState('')
+  const [dealStatus, setDealStatus] = useState('Passed')
 
   // Reset form helper
   const resetForm = () => {
@@ -100,15 +107,19 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     setSchoolHigh(8.8)
     setAirQualityIndex(32)
     setFireRisk('Low')
-    setSoilType('Clay loam, stable')
-    setMallsNearby('Westfield Valley Fair, Santana Row')
-    setForestPreserves('Alum Rock Park, Sierra Vista Open Space')
-    setLatitude(37.3382)
-    setLongitude(-121.8863)
+    setSoilType('Sandy clay, stable')
+    setMallsNearby('Water Tower Place')
+    setForestPreserves('Lincoln Park')
+    setLatitude(41.9082)
+    setLongitude(-87.6322)
+    setMarket('Chicago')
+    setUnits(1)
+    setValueAddPotential('')
+    setDealStatus('Passed')
     setEditingProperty(null)
   }
 
-  // Edit population
+  // Edit populator
   const handleStartEdit = (prop, e) => {
     e.stopPropagation()
     setEditingProperty(prop)
@@ -146,11 +157,15 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     setSchoolHigh(prop.schoolHigh ?? 8.8)
     setAirQualityIndex(prop.airQualityIndex ?? 32)
     setFireRisk(prop.fireRisk ?? 'Low')
-    setSoilType(prop.soilType ?? 'Clay loam, stable')
-    setMallsNearby(prop.mallsNearby ?? 'Westfield Valley Fair, Santana Row')
-    setForestPreserves(prop.forestPreserves ?? 'Alum Rock Park, Sierra Vista Open Space')
-    setLatitude(prop.latitude ?? 37.3382)
-    setLongitude(prop.longitude ?? -121.8863)
+    setSoilType(prop.soilType ?? 'Sandy clay, stable')
+    setMallsNearby(prop.mallsNearby ?? 'Water Tower Place')
+    setForestPreserves(prop.forestPreserves ?? 'Lincoln Park')
+    setLatitude(prop.latitude ?? 41.9082)
+    setLongitude(prop.longitude ?? -87.6322)
+    setMarket(prop.market ?? 'Chicago')
+    setUnits(prop.units ?? 1)
+    setValueAddPotential(prop.valueAddPotential ?? '')
+    setDealStatus(prop.dealStatus ?? 'Passed')
     setShowAddModal(true)
   }
 
@@ -194,7 +209,11 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
       mallsNearby: mallsNearby || 'None',
       forestPreserves: forestPreserves || 'None',
       latitude: parseFloat(latitude) || 0,
-      longitude: parseFloat(longitude) || 0
+      longitude: parseFloat(longitude) || 0,
+      market: market || 'Chicago',
+      units: parseInt(units) || 1,
+      valueAddPotential: valueAddPotential || '',
+      dealStatus: dealStatus || 'Passed'
     }
   }
 
@@ -215,7 +234,10 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     e.stopPropagation()
     if (confirm("Are you sure you want to remove this property? All associated tenant tracking will be cleared.")) {
       onDeleteProperty(id)
-      if (activeDetailProp?.id === id) setActiveDetailProp(null)
+      if (activeDetailProp?.id === id) {
+        setActiveDetailProp(null)
+        setIsDetailDrawerOpen(false)
+      }
     }
   }
 
@@ -255,7 +277,6 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     const capRate = price > 0 ? (noi / price) * 100 : 0
     const cashOnCash = initialCash > 0 ? (cashFlow / initialCash) * 100 : 0
 
-    // Build multi-year projections array
     const years = prop.holdingPeriodYears ?? 5
     const projections = []
     let currentValue = price
@@ -265,13 +286,12 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     let currentHOA = (prop.monthlyHOA ?? 0) * 12
     let currentMaint = prop.annualMaintenance ?? 2000
     let currentOther = prop.otherExpenses ?? 500
-    let cumulativeCashFlow = 0
 
     for (let y = 1; y <= years; y++) {
       currentValue = currentValue * (1 + (prop.appreciationRatePercent ?? 3) / 100)
       
       if (y > 1) {
-        currentRent = currentRent * (1 + 3 / 100) // Default 3% rent growth
+        currentRent = currentRent * (1 + 3 / 100)
         currentTax = currentTax * (1 + (prop.taxIncreasePercent ?? 3) / 100)
         currentInsurance = currentInsurance * (1 + (prop.insuranceIncreasePercent ?? 3) / 100)
         currentHOA = currentHOA * (1 + (prop.hoaIncreasePercent ?? 3) / 100)
@@ -285,7 +305,6 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
       
       const yNOI = Math.max(0, currentRent - yExpenses)
       const yCashFlow = yNOI - annualDebtService
-      cumulativeCashFlow += yCashFlow
 
       let remainingBalance = 0
       const elapsedMonths = y * 12
@@ -328,23 +347,72 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
 
   // Filter listings
   const filteredProperties = properties.filter(prop => {
-    // Search query match
-    if (searchQuery && !prop.address.toLowerCase().includes(searchQuery.toLowerCase())) return false
-    // Max rent match
+    if (searchQuery && !prop.address.toLowerCase().includes(searchQuery.toLowerCase()) && !(prop.market && prop.market.toLowerCase().includes(searchQuery.toLowerCase()))) return false
     if (maxRentFilter !== 'Any' && prop.rent > parseInt(maxRentFilter)) return false
-    // Home type match
-    if (propertyTypeFilter !== 'Any' && prop.type !== propertyTypeFilter) return false
     return true
   })
 
-  // Set default details prop if null
+  // Set default active detail prop
   useEffect(() => {
     if (filteredProperties.length > 0 && !activeDetailProp) {
       setActiveDetailProp(filteredProperties[0])
     }
   }, [filteredProperties, activeDetailProp])
 
-  // Compare listings
+  // OpenStreetMap / Leaflet Setup
+  useEffect(() => {
+    if (window.L && !mapInstance && activeSubTab === 'portfolio') {
+      const map = window.L.map('map-viewport').setView([41.8781, -87.6298], 11)
+      window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map)
+      setMapInstance(map)
+    }
+  }, [activeSubTab, mapInstance])
+
+  useEffect(() => {
+    if (mapInstance && window.L) {
+      // Clear pins
+      markers.forEach(m => m.remove())
+      const newMarkers = []
+
+      filteredProperties.forEach(prop => {
+        if (prop.latitude && prop.longitude) {
+          const formattedPrice = prop.purchasePrice 
+            ? `$${Math.round(prop.purchasePrice / 1000)}K` 
+            : `$${Math.round(prop.rent / 100) / 10}K`
+
+          // Custom Green Circular Tag marker matching screenshot style
+          const greenIcon = window.L.divIcon({
+            className: 'custom-map-pin-badge',
+            html: `<div class="map-pin-inner">${formattedPrice}</div>`,
+            iconSize: [52, 26]
+          })
+
+          const marker = window.L.marker([prop.latitude, prop.longitude], { icon: greenIcon })
+            .addTo(mapInstance)
+            .bindPopup(`<strong>${prop.address}</strong><br/>Rent: $${prop.rent.toLocaleString()}/mo`)
+          
+          marker.on('click', () => {
+            setActiveDetailProp(prop)
+            handleLoadPropertyToCalculator(prop)
+            setIsDetailDrawerOpen(true)
+          })
+
+          newMarkers.push(marker)
+        }
+      })
+      setMarkers(newMarkers)
+    }
+  }, [mapInstance, filteredProperties])
+
+  // Zoom on active prop
+  useEffect(() => {
+    if (mapInstance && activeDetailProp && activeDetailProp.latitude && activeDetailProp.longitude) {
+      mapInstance.setView([activeDetailProp.latitude, activeDetailProp.longitude], 13)
+    }
+  }, [activeDetailProp, mapInstance])
+
   const toggleCompareSelect = (id, e) => {
     e.stopPropagation()
     if (comparedPropertyIds.includes(id)) {
@@ -358,7 +426,6 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     }
   }
 
-  // ROI Calculator Ad-hoc calculation updates
   const handleLoadPropertyToCalculator = (prop) => {
     setPurchasePrice(prop.purchasePrice ?? 320000)
     setDownPaymentPercent(prop.downPaymentPercent ?? 25)
@@ -386,433 +453,495 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
   const activeDetailFinancials = activeDetailProp ? calculateROI(activeDetailProp) : null
 
   return (
-    <div className="zillow-platform-container animate-fade-in">
+    <div className="realpal-dashboard-container animate-fade-in">
       
-      {/* Zillow Top Brand Navigation Header */}
-      <header className="zillow-nav-header no-print">
-        <div className="nav-left">
-          <div className="zillow-brand-logo">RealPal</div>
-          <span className="rent-portal-tag">Rentals</span>
-        </div>
-        <nav className="nav-links">
-          <a href="#" className="active">Buy</a>
-          <a href="#">Rent</a>
-          <a href="#">Sell</a>
-          <a href="#">Home Loans</a>
-          <a href="#">Agent Finder</a>
-          <span className="divider"></span>
-          <a href="#" onClick={() => { setActiveSubTab('portfolio'); }}>🔍 Map Search</a>
-          <a href="#" onClick={() => { setActiveSubTab('compare'); }}>⚖️ Comparison Matrix ({comparedPropertyIds.length})</a>
-        </nav>
-        <div className="nav-right">
-          <button className="btn-zillow-primary" onClick={() => { resetForm(); setShowAddModal(true); }}>
-            ➕ Post Rental Listing
+      {/* 1. Left Vertical Icon Sidebar (Matching Search, Updates, Favorites in screenshot) */}
+      <aside className="left-icon-sidebar no-print">
+        <div className="sidebar-logo">RP</div>
+        <div className="sidebar-icons-list">
+          <button className={`sidebar-icon-btn ${activeSubTab === 'portfolio' ? 'active' : ''}`} onClick={() => { setActiveSubTab('portfolio'); setIsDetailDrawerOpen(false); }} title="Search Maps & Listings">
+            🔍<span className="lbl">Search</span>
+          </button>
+          <button className={`sidebar-icon-btn ${activeSubTab === 'spreadsheet' ? 'active' : ''}`} onClick={() => { setActiveSubTab('spreadsheet'); setIsDetailDrawerOpen(false); }} title="Spreadsheet Underwriting Sheet">
+            📄<span className="lbl">Sheet</span>
+          </button>
+          <button className={`sidebar-icon-btn ${activeSubTab === 'compare' ? 'active' : ''}`} onClick={() => { setActiveSubTab('compare'); setIsDetailDrawerOpen(false); }} title="Comparison Matrix">
+            ⚖️<span className="lbl">Compare</span>
+          </button>
+          <button className="sidebar-icon-btn" onClick={() => { resetForm(); setShowAddModal(true); }} title="Post Rental Listing">
+            ⚙️<span className="lbl">List</span>
           </button>
         </div>
-      </header>
+      </aside>
 
-      {/* Sub-Header Zillow Filters Bar */}
-      {activeSubTab === 'portfolio' && (
-        <div className="zillow-filter-bar no-print">
-          <div className="search-input-wrapper">
+      {/* Main content wrapper next to sidebar */}
+      <div className="main-viewport-content">
+
+        {/* 2. Top Navigation Header & Zillow-style Filter Bar */}
+        <header className="top-search-filter-bar no-print">
+          <div className="search-bar-input-box">
             <input 
               type="text" 
-              placeholder="Address, neighborhood, ZIP..." 
+              placeholder="Chicago, IL"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="zillow-search-input"
+              className="top-search-address-field"
             />
-            <span className="search-icon">🔍</span>
+            {searchQuery && <button className="clear-search-btn" onClick={() => setSearchQuery('')}>×</button>}
+            <button className="search-trigger-btn">🔍</button>
           </div>
 
-          <div className="filter-dropdown-group">
-            <div className="filter-select-wrapper">
-              <label>Max Rent</label>
-              <select value={maxRentFilter} onChange={(e) => setMaxRentFilter(e.target.value)} className="zillow-select">
-                <option value="Any">Any Price</option>
-                <option value="1500">$1,500/mo</option>
-                <option value="2500">$2,500/mo</option>
-                <option value="3500">$3,500/mo</option>
-                <option value="5000">$5,000/mo</option>
-              </select>
-            </div>
+          <div className="top-dropdown-filters">
+            <select value={maxRentFilter} onChange={(e) => setMaxRentFilter(e.target.value)} className="top-dropdown-select">
+              <option value="Any">Any Price</option>
+              <option value="1500">Max $1,500/mo</option>
+              <option value="2500">Max $2,500/mo</option>
+              <option value="3500">Max $3,500/mo</option>
+              <option value="5000">Max $5,000/mo</option>
+            </select>
 
-            <div className="filter-select-wrapper">
-              <label>Home Type</label>
-              <select value={propertyTypeFilter} onChange={(e) => setPropertyTypeFilter(e.target.value)} className="zillow-select">
-                <option value="Any">All Types</option>
-                <option value="Single Family">Single Family</option>
-                <option value="Multi Family">Multi Family</option>
-                <option value="Condo">Condo</option>
-                <option value="Apartment">Apartment</option>
-              </select>
-            </div>
+            <select value={propertyTypeFilter} onChange={(e) => setPropertyTypeFilter(e.target.value)} className="top-dropdown-select">
+              <option value="Any">Home Type</option>
+              <option value="Single Family">Single Family</option>
+              <option value="Multi Family">Multi Family</option>
+              <option value="Condo">Condo</option>
+              <option value="Apartment">Apartment</option>
+            </select>
+
+            <button className="btn-filter-more">Filters ⚙️</button>
           </div>
 
-          <div className="listing-count-tag">
-            {filteredProperties.length} Homes matching search
-          </div>
-        </div>
-      )}
+          <button className="btn-save-search-green">Save Search</button>
+        </header>
 
-      {/* PORTFOLIO SEARCH VIEW (SPLIT PANEL LAYOUT) */}
-      {activeSubTab === 'portfolio' && (
-        <div className="zillow-split-container">
-          
-          {/* Left Panel: Rental Listings Grid */}
-          <div className="zillow-left-listings-panel no-print">
-            <div className="listings-header">
-              <h2>Rental Listings</h2>
-              <div className="sort-by">Sort: <strong>Newest</strong></div>
-            </div>
+        {/* 3. Dashboard views */}
 
-            {filteredProperties.length === 0 ? (
-              <div className="zillow-empty-state">
-                <span className="house-emoji">🏠</span>
-                <h3>No rental listings found</h3>
-                <p>Adjust your filters or add a new rental property to get started.</p>
-                <button className="btn-zillow-outline" onClick={() => setShowAddModal(true)}>Add Property</button>
-              </div>
-            ) : (
-              <div className="zillow-listings-grid">
-                {filteredProperties.map(prop => {
-                  const isSelected = activeDetailProp?.id === prop.id
-                  const financials = calculateROI(prop)
-                  return (
-                    <div 
-                      key={prop.id} 
-                      className={`zillow-listing-card ${isSelected ? 'selected' : ''}`}
-                      onClick={() => { setActiveDetailProp(prop); handleLoadPropertyToCalculator(prop); }}
-                    >
-                      <div className="card-image-box">
-                        <div className="listing-type-badge">{prop.type}</div>
-                        <div className="occupancy-badge">{prop.status}</div>
-                        <div className="card-image-placeholder">🏠 RealPal Verified</div>
-                        <button className={`compare-bubble-btn ${comparedPropertyIds.includes(prop.id) ? 'active' : ''}`} onClick={(e) => toggleCompareSelect(prop.id, e)} title="Compare property">
-                          ⚖️
-                        </button>
-                      </div>
-
-                      <div className="card-info-box">
-                        <div className="price-row">
-                          <span className="price">${prop.rent.toLocaleString()}<span className="mo">/mo</span></span>
-                        </div>
-                        <div className="details-row">
-                          <strong>{prop.type === 'Single Family' ? '3 bds' : '2 bds'}</strong> • <strong>2 ba</strong> • <strong>1,450 sqft</strong>
-                        </div>
-                        <div className="address">{prop.address}</div>
-
-                        <div className="zillow-mini-yields">
-                          <span className="yield-pill cap">Cap Rate: {financials.capRate.toFixed(2)}%</span>
-                          <span className="yield-pill coc">CoC: {financials.cashOnCash.toFixed(2)}%</span>
-                        </div>
-
-                        <div className="environmental-strip">
-                          <span className="env-pill aqi">🍃 AQI {prop.airQualityIndex ?? 32}</span>
-                          <span className="env-pill fire">🔥 {prop.fireRisk ?? 'Low'} Fire</span>
-                          <span className="env-pill school">🎓 School {(prop.schoolMiddle ?? 8.5).toFixed(1)}</span>
-                        </div>
-
-                        <div className="card-actions-strip">
-                          <button className="action-btn edit-btn" onClick={(e) => handleStartEdit(prop, e)}>Edit</button>
-                          <button className="action-btn delete-btn" onClick={(e) => handleDeleteProperty(prop.id, e)}>Delete</button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Right Panel: Detail Panel Drawer & Map */}
-          <div className="zillow-right-detail-panel">
+        {/* MAP SEARCH VIEW (Split pane matching screenshot) */}
+        {activeSubTab === 'portfolio' && (
+          <div className="dashboard-split-screen">
             
-            {activeDetailProp ? (
-              <div className="zillow-listing-details-sheet print-sheet">
-                
-                {/* Visual Header */}
-                <div className="sheet-image-gallery no-print">
-                  <div className="main-gallery-pic">
-                    <span className="realpal-guarantee-shield">🛡️ RealPal Guaranteed Rental Data</span>
-                    <span className="prop-addr-overlay">{activeDetailProp.address}</span>
+            {/* Left Side Pane: Leaflet Map */}
+            <div className="split-left-map-viewport no-print">
+              <div id="map-viewport"></div>
+            </div>
+
+            {/* Right Side Pane: Listings Cards Grid / Details Drawer */}
+            <div className="split-right-listings-grid-pane">
+              
+              {!isDetailDrawerOpen ? (
+                // Listings Grid Pane (2-columns matching screenshot)
+                <div className="listings-grid-scroller no-print">
+                  <div className="listings-scroller-header">
+                    <h3>Chicago, IL Real Estate & Homes For Rent</h3>
+                    <span>{filteredProperties.length} results • Sort: <strong>Homes for You</strong></span>
                   </div>
-                </div>
 
-                <div className="sheet-header-print print-only">
-                  <h1>RealPal Property ROI & Environmental Sheet</h1>
-                  <p className="address">{activeDetailProp.address}</p>
-                  <p className="date">Generated: {new Date().toLocaleDateString()}</p>
-                </div>
+                  {filteredProperties.length === 0 ? (
+                    <div className="empty-grid-state">
+                      <span className="large-emoji-display">🏠</span>
+                      <h4>No listings match your search</h4>
+                      <p>Try clearing your queries or check different price parameters.</p>
+                    </div>
+                  ) : (
+                    <div className="listings-two-col-grid">
+                      {filteredProperties.map(prop => {
+                        const financials = calculateROI(prop)
+                        return (
+                          <div 
+                            key={prop.id} 
+                            className="listing-grid-card"
+                            onClick={() => { 
+                              setActiveDetailProp(prop); 
+                              handleLoadPropertyToCalculator(prop); 
+                              setIsDetailDrawerOpen(true); 
+                            }}
+                          >
+                            <div className="card-media-gallery">
+                              <span className="card-top-left-badge">Spacious layout</span>
+                              <span className="card-favorite-heart">❤️</span>
+                              
+                              {/* Dots indicator at the bottom-center of image */}
+                              <div className="card-dots-carousel">
+                                <span className="dot active"></span>
+                                <span className="dot"></span>
+                                <span className="dot"></span>
+                                <span className="dot"></span>
+                              </div>
+                            </div>
 
-                {/* Core Property Metrics */}
-                <div className="sheet-body-content">
+                            <div className="card-description-box">
+                              <div className="price-line">
+                                <h3>${prop.rent.toLocaleString()}/mo</h3>
+                              </div>
+                              <div className="details-line">
+                                <strong>{prop.units} Units</strong> • <strong>{prop.type}</strong> • <strong>1,450 sqft</strong> • Active
+                              </div>
+                              <div className="address-line">
+                                {prop.address}
+                              </div>
+                              <div className="agency-line">
+                                RealPal Underwritten Listing • {prop.dealStatus}
+                              </div>
+
+                              <div className="underwriting-badge-row">
+                                <span className="badge cap">Cap Rate: {financials.capRate.toFixed(1)}%</span>
+                                <span className="badge coc">CoC: {financials.cashOnCash.toFixed(1)}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Detailed ROI Underwriting Drawer (Covering the listings grid)
+                <div className="sliding-detail-drawer print-sheet">
                   
-                  <div className="core-details-header">
-                    <div className="price-rent-block">
-                      <h2>${activeDetailProp.rent.toLocaleString()}/mo</h2>
-                      <p>{activeDetailProp.type} • Active Tenant: {activeDetailProp.tenantName}</p>
-                    </div>
-                    <div className="yields-header-block no-print">
-                      <div className="yield-header-metric">
-                        <span className="lbl">Cap Rate</span>
-                        <span className="val">{activeDetailFinancials.capRate.toFixed(2)}%</span>
-                      </div>
-                      <div className="yield-header-metric">
-                        <span className="lbl">Cash-on-Cash</span>
-                        <span className="val text-orange">{activeDetailFinancials.cashOnCash.toFixed(2)}%</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="prop-divider"></div>
-
-                  {/* ROI Calculator Inputs & Variables */}
-                  <h3 className="section-title">📊 Acquisition & ROI Parameters</h3>
-                  <div className="calculator-two-col-grid">
-                    
-                    {/* Left Col: ROI values inputs */}
-                    <div className="calculator-inline-inputs no-print">
-                      <div className="form-grid-2">
-                        <div className="inline-form-group">
-                          <label>Purchase Price ($)</label>
-                          <input type="number" value={purchasePrice} onChange={(e) => { setPurchasePrice(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, purchasePrice: parseFloat(e.target.value) || 0}); }} />
-                        </div>
-                        <div className="inline-form-group">
-                          <label>Down Payment (%)</label>
-                          <input type="number" value={downPaymentPercent} onChange={(e) => { setDownPaymentPercent(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, downPaymentPercent: parseFloat(e.target.value) || 0}); }} />
-                        </div>
-                        <div className="inline-form-group">
-                          <label>Interest Rate (%)</label>
-                          <input type="number" step="0.01" value={interestRate} onChange={(e) => { setInterestRate(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, interestRate: parseFloat(e.target.value) || 0}); }} />
-                        </div>
-                        <div className="inline-form-group">
-                          <label>Loan Term (Yrs)</label>
-                          <input type="number" value={loanTermYears} onChange={(e) => { setLoanTermYears(parseInt(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, loanTermYears: parseInt(e.target.value) || 0}); }} />
-                        </div>
-                        <div className="inline-form-group">
-                          <label>Taxes ($/yr)</label>
-                          <input type="number" value={annualPropertyTax} onChange={(e) => { setAnnualPropertyTax(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, annualPropertyTax: parseFloat(e.target.value) || 0}); }} />
-                        </div>
-                        <div className="inline-form-group">
-                          <label>Insurance ($/yr)</label>
-                          <input type="number" value={annualInsurance} onChange={(e) => { setAnnualInsurance(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, annualInsurance: parseFloat(e.target.value) || 0}); }} />
-                        </div>
-                        <div className="inline-form-group">
-                          <label>Maintenance ($/yr)</label>
-                          <input type="number" value={annualMaintenance} onChange={(e) => { setAnnualMaintenance(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, annualMaintenance: parseFloat(e.target.value) || 0}); }} />
-                        </div>
-                        <div className="inline-form-group">
-                          <label>Appreciation (%/yr)</label>
-                          <input type="number" value={appreciationRatePercent} onChange={(e) => { setAppreciationRatePercent(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, appreciationRatePercent: parseFloat(e.target.value) || 0}); }} />
-                        </div>
-                      </div>
-                      <p className="auto-save-tag">⚡ Inputs save to listing automatically</p>
-                    </div>
-
-                    {/* Right Col: ROI calculated table */}
-                    <div className="calculator-yields-table">
-                      <table className="compact-yields-table">
-                        <tbody>
-                          <tr><td>Initial Cash Invested</td><td className="text-right font-bold">${Math.round(activeDetailFinancials.initialCash).toLocaleString()}</td></tr>
-                          <tr><td>Monthly Mortgage (P&I)</td><td className="text-right text-red">-${Math.round(activeDetailFinancials.monthlyMortgage).toLocaleString()}/mo</td></tr>
-                          <tr><td>Taxes & HOI (Monthly)</td><td className="text-right text-red">-${Math.round((annualPropertyTax + annualInsurance) / 12).toLocaleString()}/mo</td></tr>
-                          <tr><td>Maintenance & Vacancy (Monthly)</td><td className="text-right text-red">-${Math.round((annualMaintenance + activeDetailFinancials.vacancyLoss) / 12).toLocaleString()}/mo</td></tr>
-                          <tr className="border-top"><td>Net Monthly Cash Flow</td><td className="text-right text-green font-bold">${Math.round(activeDetailFinancials.cashFlow / 12).toLocaleString()}/mo</td></tr>
-                        </tbody>
-                      </table>
-                    </div>
-
-                  </div>
-
-                  <div className="prop-divider"></div>
-
-                  {/* Multi-year projections */}
-                  <h3 className="section-title">📈 Multi-Year Growth Logs</h3>
-                  <div className="table-responsive">
-                    <table className="projections-table">
-                      <thead>
-                        <tr>
-                          <th>Year</th>
-                          <th>Property Value</th>
-                          <th>Annual Rent</th>
-                          <th>Expenses</th>
-                          <th>Cash Flow</th>
-                          <th>Equity</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {activeDetailFinancials.projections.map(proj => (
-                          <tr key={proj.year}>
-                            <td>Year {proj.year}</td>
-                            <td>${proj.value.toLocaleString()}</td>
-                            <td>${proj.income.toLocaleString()}</td>
-                            <td>${proj.expenses.toLocaleString()}</td>
-                            <td className={proj.cashFlow >= 0 ? 'text-green' : 'text-red'}>${proj.cashFlow.toLocaleString()}</td>
-                            <td className="text-green font-bold">${proj.equity.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="prop-divider"></div>
-
-                  {/* Environmental & Zillow Nearby Places */}
-                  <h3 className="section-title">🎓 GreatSchools™ Nearby Ratings</h3>
-                  <div className="schools-rating-grid">
-                    <div className="school-rating-bar">
-                      <span className="school-lbl">Elementary School</span>
-                      <div className="rating-track-wrapper"><div className="rating-track-fill" style={{ width: `${(activeDetailProp.schoolElementary ?? 8.5) * 10}%` }}></div></div>
-                      <span className="rating-num">{(activeDetailProp.schoolElementary ?? 8.5).toFixed(1)}/10</span>
-                    </div>
-                    <div className="school-rating-bar">
-                      <span className="school-lbl">Middle School</span>
-                      <div className="rating-track-wrapper"><div className="rating-track-fill" style={{ width: `${(activeDetailProp.schoolMiddle ?? 9.0) * 10}%` }}></div></div>
-                      <span className="rating-num">{(activeDetailProp.schoolMiddle ?? 9.0).toFixed(1)}/10</span>
-                    </div>
-                    <div className="school-rating-bar">
-                      <span className="school-lbl">High School</span>
-                      <div className="rating-track-wrapper"><div className="rating-track-fill" style={{ width: `${(activeDetailProp.schoolHigh ?? 8.8) * 10}%` }}></div></div>
-                      <span className="rating-num">{(activeDetailProp.schoolHigh ?? 8.8).toFixed(1)}/10</span>
-                    </div>
-                  </div>
-
-                  <div className="prop-divider"></div>
-
-                  <h3 className="section-title">🌱 Environment & Location Safety</h3>
-                  <table className="environmental-table">
-                    <tbody>
-                      <tr><td>Air Quality Index (AQI)</td><td><strong>{activeDetailProp.airQualityIndex ?? 32} AQI (Good)</strong></td></tr>
-                      <tr><td>Wildfire Hazard Level</td><td className="text-orange font-bold">{activeDetailProp.fireRisk ?? 'Low'}</td></tr>
-                      <tr><td>Soil Architecture</td><td>{activeDetailProp.soilType ?? 'Clay loam, stable'}</td></tr>
-                      <tr><td>Forest Preserves Nearby</td><td>{activeDetailProp.forestPreserves ?? 'None'}</td></tr>
-                      <tr><td>Shopping Malls Nearby</td><td>{activeDetailProp.mallsNearby ?? 'None'}</td></tr>
-                    </tbody>
-                  </table>
-
-                  {/* Action buttons */}
-                  <div className="drawer-action-strip no-print">
-                    <button className="btn-zillow-outline" onClick={() => window.print()}>
+                  <div className="drawer-nav-header no-print">
+                    <button className="btn-close-drawer" onClick={() => setIsDetailDrawerOpen(false)}>
+                      ← Back to listings
+                    </button>
+                    <button className="btn-print-pdf-green" onClick={() => window.print()}>
                       🖨️ Export PDF Property Sheet
                     </button>
                   </div>
 
-                </div>
+                  <div className="print-header print-only">
+                    <h2>RealPal Property Underwriting Log</h2>
+                    <h3>{activeDetailProp.address}</h3>
+                    <p>Market: {activeDetailProp.market} | Units: {activeDetailProp.units} | Status: {activeDetailProp.dealStatus}</p>
+                    <p>Generated Date: {new Date().toLocaleDateString()}</p>
+                  </div>
 
-              </div>
-            ) : (
-              <div className="no-detail-selected no-print">
-                <span className="search-logo-large">🔍</span>
-                <h3>Select a listing to view ROI sheets & environment reports</h3>
-              </div>
-            )}
+                  <div className="drawer-body-scrollable">
+                    <div className="drawer-hero-block">
+                      <span className="badge-guarantee">🛡️ RealPal Certified Sheet</span>
+                      <h2>{activeDetailProp.address}</h2>
+                      <p>{activeDetailProp.units} Units • {activeDetailProp.market}</p>
+                    </div>
+
+                    {/* Financial stats yields row */}
+                    <div className="yields-grid-row">
+                      <div className="yield-mini-card">
+                        <span className="lbl">Rent/mo</span>
+                        <span className="val">${activeDetailProp.rent.toLocaleString()}</span>
+                      </div>
+                      <div className="yield-mini-card">
+                        <span className="lbl">Cap Rate</span>
+                        <span className="val text-green">{activeDetailFinancials.capRate.toFixed(2)}%</span>
+                      </div>
+                      <div className="yield-mini-card">
+                        <span className="lbl">Cash-on-Cash</span>
+                        <span className={`val ${activeDetailFinancials.cashOnCash >= 0 ? 'text-green' : 'text-red'}`}>
+                          {activeDetailFinancials.cashOnCash.toFixed(2)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="prop-divider"></div>
+
+                    {/* Underwriting notes */}
+                    <div className="underwriting-notes-panel">
+                      <h4>💡 Underwriting & Value-Add Details</h4>
+                      <p>{activeDetailProp.valueAddPotential || 'No value-add potential registered for this listing.'}</p>
+                      <div className="status-badge-lbl">Status: <strong>{activeDetailProp.dealStatus}</strong></div>
+                    </div>
+
+                    <div className="prop-divider"></div>
+
+                    {/* ROI Calculator Inputs */}
+                    <h3 className="section-title">📊 ROI Parameters & Variable Calculator</h3>
+                    
+                    <div className="inline-calculator-block">
+                      
+                      <div className="inputs-strip no-print">
+                        <div className="form-grid-3">
+                          <div className="form-field-box">
+                            <label>Purchase Price ($)</label>
+                            <input type="number" value={purchasePrice} onChange={(e) => { setPurchasePrice(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, purchasePrice: parseFloat(e.target.value) || 0}); }} />
+                          </div>
+                          <div className="form-field-box">
+                            <label>Down Payment (%)</label>
+                            <input type="number" value={downPaymentPercent} onChange={(e) => { setDownPaymentPercent(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, downPaymentPercent: parseFloat(e.target.value) || 0}); }} />
+                          </div>
+                          <div className="form-field-box">
+                            <label>Interest Rate (%)</label>
+                            <input type="number" step="0.01" value={interestRate} onChange={(e) => { setInterestRate(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, interestRate: parseFloat(e.target.value) || 0}); }} />
+                          </div>
+                          <div className="form-field-box">
+                            <label>Property Tax ($/yr)</label>
+                            <input type="number" value={annualPropertyTax} onChange={(e) => { setAnnualPropertyTax(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, annualPropertyTax: parseFloat(e.target.value) || 0}); }} />
+                          </div>
+                          <div className="form-field-box">
+                            <label>HOI / Insurance ($/yr)</label>
+                            <input type="number" value={annualInsurance} onChange={(e) => { setAnnualInsurance(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, annualInsurance: parseFloat(e.target.value) || 0}); }} />
+                          </div>
+                          <div className="form-field-box">
+                            <label>Maintenance ($/yr)</label>
+                            <input type="number" value={annualMaintenance} onChange={(e) => { setAnnualMaintenance(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, annualMaintenance: parseFloat(e.target.value) || 0}); }} />
+                          </div>
+                        </div>
+                        <p className="auto-save-warning">⚡ Changes save to listing immediately</p>
+                      </div>
+
+                      <div className="outputs-table-box">
+                        <table className="compact-roi-yield-table">
+                          <tbody>
+                            <tr><td>Initial Capital Invested</td><td className="text-right font-bold">${Math.round(activeDetailFinancials.initialCash).toLocaleString()}</td></tr>
+                            <tr><td>Monthly Mortgage (P&I)</td><td className="text-right text-red">-${Math.round(activeDetailFinancials.monthlyMortgage).toLocaleString()}</td></tr>
+                            <tr><td>Taxes & HOI (Monthly)</td><td className="text-right text-red">-${Math.round((annualPropertyTax + annualInsurance) / 12).toLocaleString()}</td></tr>
+                            <tr><td>Maintenance & Vacancy (Monthly)</td><td className="text-right text-red">-${Math.round((annualMaintenance + activeDetailFinancials.vacancyLoss) / 12).toLocaleString()}</td></tr>
+                            <tr className="border-t font-bold"><td>Net Cash Flow</td><td className="text-right text-green">${Math.round(activeDetailFinancials.cashFlow).toLocaleString()}/yr</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                    </div>
+
+                    <div className="prop-divider"></div>
+
+                    {/* Projections logs */}
+                    <h3 className="section-title">📈 Growth Log & Projections</h3>
+                    <div className="table-responsive">
+                      <table className="projections-log-table">
+                        <thead>
+                          <tr>
+                            <th>Year</th>
+                            <th>Property Value</th>
+                            <th>Rental Income</th>
+                            <th>Expenses</th>
+                            <th>Cash Flow</th>
+                            <th>Equity</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {activeDetailFinancials.projections.map(proj => (
+                            <tr key={proj.year}>
+                              <td>Year {proj.year}</td>
+                              <td>${proj.value.toLocaleString()}</td>
+                              <td>${proj.income.toLocaleString()}</td>
+                              <td>${proj.expenses.toLocaleString()}</td>
+                              <td className={proj.cashFlow >= 0 ? 'text-green' : 'text-red'}>${proj.cashFlow.toLocaleString()}</td>
+                              <td className="text-green font-bold">${proj.equity.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="prop-divider"></div>
+
+                    {/* Schools ratings */}
+                    <h3 className="section-title">🎓 GreatSchools™ Nearby Ratings</h3>
+                    <div className="schools-bars-group">
+                      <div className="school-rating-bar">
+                        <span className="school-lbl">Elementary School</span>
+                        <div className="rating-track-wrapper"><div className="rating-track-fill" style={{ width: `${(activeDetailProp.schoolElementary ?? 8.5) * 10}%` }}></div></div>
+                        <span className="rating-num">{(activeDetailProp.schoolElementary ?? 8.5).toFixed(1)}/10</span>
+                      </div>
+                      <div className="school-rating-bar">
+                        <span className="school-lbl">Middle School</span>
+                        <div className="rating-track-wrapper"><div className="rating-track-fill" style={{ width: `${(activeDetailProp.schoolMiddle ?? 9.0) * 10}%` }}></div></div>
+                        <span className="rating-num">{(activeDetailProp.schoolMiddle ?? 9.0).toFixed(1)}/10</span>
+                      </div>
+                      <div className="school-rating-bar">
+                        <span className="school-lbl">High School</span>
+                        <div className="rating-track-wrapper"><div className="rating-track-fill" style={{ width: `${(activeDetailProp.schoolHigh ?? 8.8) * 10}%` }}></div></div>
+                        <span className="rating-num">{(activeDetailProp.schoolHigh ?? 8.8).toFixed(1)}/10</span>
+                      </div>
+                    </div>
+
+                    <div className="prop-divider"></div>
+
+                    {/* Location safety hazards */}
+                    <h3 className="section-title">🌱 Environment & Safety Indicators</h3>
+                    <table className="env-summary-table">
+                      <tbody>
+                        <tr><td>Air Quality Index (AQI)</td><td><strong>{activeDetailProp.airQualityIndex ?? 32} AQI (Good)</strong></td></tr>
+                        <tr><td>Wildfire Risk</td><td className="text-orange font-bold">{activeDetailProp.fireRisk ?? 'Low'}</td></tr>
+                        <tr><td>Soil Framework</td><td>{activeDetailProp.soilType ?? 'Sandy clay, stable'}</td></tr>
+                        <tr><td>Forest Preserves Nearby</td><td>{activeDetailProp.forestPreserves ?? 'None'}</td></tr>
+                        <tr><td>Shopping Malls Nearby</td><td>{activeDetailProp.mallsNearby ?? 'None'}</td></tr>
+                      </tbody>
+                    </table>
+
+                    <div className="sheet-actions no-print" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button className="btn-print-pdf-green" onClick={() => window.print()}>
+                        🖨️ Export PDF Property Sheet
+                      </button>
+                    </div>
+
+                  </div>
+
+                </div>
+              )}
+
+            </div>
 
           </div>
+        )}
 
-        </div>
-      )}
-
-      {/* COMPARISON MATRIX TAB */}
-      {activeSubTab === 'compare' && (
-        <div className="zillow-compare-container no-print">
-          {comparedPropertyIds.length === 0 ? (
-            <div className="zillow-empty-state">
-              <span className="house-emoji">⚖️</span>
-              <h3>No properties selected for comparison</h3>
-              <p>Go back to the Search Listings view and click the scales button (⚖️) on up to 3 listings to compare them.</p>
-            </div>
-          ) : (
-            <div className="zillow-compare-sheet glass-card">
-              <h2 className="section-title">⚖️ Side-by-Side Property Comparison Matrix</h2>
-              <table className="zillow-compare-table">
-                <thead>
-                  <tr>
-                    <th>Feature Metric</th>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <th key={pid} className="text-center">{prop?.address}</th>
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🏡 Listing Details</td></tr>
-                  <tr>
-                    <td className="lbl">Type</td>
-                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.type}</td>)}
-                  </tr>
-                  <tr>
-                    <td className="lbl">Occupancy Status</td>
-                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.status}</td>)}
-                  </tr>
-
-                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>💰 ROI & Income Details</td></tr>
-                  <tr>
-                    <td className="lbl">Monthly Rent</td>
-                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold">${properties.find(p => p.id === pid)?.rent.toLocaleString()}</td>)}
-                  </tr>
-                  <tr>
-                    <td className="lbl">Purchase Price</td>
-                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold">${(properties.find(p => p.id === pid)?.purchasePrice ?? 320000).toLocaleString()}</td>)}
-                  </tr>
-                  <tr>
-                    <td className="lbl">Cap Rate</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      const roi = calculateROI(prop)
-                      return <td key={pid} className="text-center font-bold text-blue">{roi.capRate.toFixed(2)}%</td>
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="lbl">Cash-on-Cash Return</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      const roi = calculateROI(prop)
-                      return <td key={pid} className="text-center font-bold text-orange">{roi.cashOnCash.toFixed(2)}%</td>
-                    })}
-                  </tr>
-
-                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🎓 Schools ratings</td></tr>
-                  <tr>
-                    <td className="lbl">Middle School</td>
-                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold text-green">{(properties.find(p => p.id === pid)?.schoolMiddle ?? 8.5).toFixed(1)}/10</td>)}
-                  </tr>
-                  <tr>
-                    <td className="lbl">High School</td>
-                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold text-green">{(properties.find(p => p.id === pid)?.schoolHigh ?? 8.5).toFixed(1)}/10</td>)}
-                  </tr>
-
-                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🌱 Location Hazards</td></tr>
-                  <tr>
-                    <td className="lbl">Air Quality Index</td>
-                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.airQualityIndex ?? 32} AQI</td>)}
-                  </tr>
-                  <tr>
-                    <td className="lbl">Wildfire Risk</td>
-                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center text-orange font-bold">{properties.find(p => p.id === pid)?.fireRisk ?? 'Low'}</td>)}
-                  </tr>
-                  <tr>
-                    <td className="lbl">Malls Nearby</td>
-                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-normal">{properties.find(p => p.id === pid)?.mallsNearby}</td>)}
-                  </tr>
-                </tbody>
-              </table>
+        {/* SPREADSHEET UNDERWRITING LOG VIEW (Perfect recreation of uploaded image) */}
+        {activeSubTab === 'spreadsheet' && (
+          <div className="spreadsheet-view-container no-print">
+            <div className="spreadsheet-card-container">
+              <h2 className="spreadsheet-title">📋 Real Estate Investment Underwriting log</h2>
+              <p className="spreadsheet-subtitle">Chicago Area Portfolios Underwriting Log</p>
               
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
-                <button onClick={() => setComparedPropertyIds([])} className="btn-zillow-outline">Clear Selections</button>
+              <div className="table-responsive">
+                <table className="spreadsheet-underwriting-table">
+                  <thead>
+                    <tr>
+                      <th>Address</th>
+                      <th>Market</th>
+                      <th className="text-center">Units</th>
+                      <th className="text-right">Ask Price ($)</th>
+                      <th className="text-right">Gross Income ($/yr)</th>
+                      <th className="text-right">Total Expenses ($/yr)</th>
+                      <th className="text-right">NOI ($/yr)</th>
+                      <th className="text-center">Adj Cap Rate</th>
+                      <th className="text-right">Cash Flow ($/yr)</th>
+                      <th className="text-center">CoC Return</th>
+                      <th>Value-Add Potential</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProperties.map(prop => {
+                      const financials = calculateROI(prop)
+                      const isPassed = prop.dealStatus && prop.dealStatus.toLowerCase().includes('passed')
+                      
+                      return (
+                        <tr key={prop.id}>
+                          <td className="font-semibold">{prop.address}</td>
+                          <td>{prop.market || 'Chicago'}</td>
+                          <td className="text-center text-blue font-semibold">{prop.units || 1}</td>
+                          <td className="text-right text-blue font-semibold">${(prop.purchasePrice ?? 320000).toLocaleString()}</td>
+                          <td className="text-right">${Math.round(prop.rent * 12).toLocaleString()}</td>
+                          <td className="text-right">${Math.round(financials.annualExpenses).toLocaleString()}</td>
+                          <td className="text-right font-semibold">${Math.round(financials.noi).toLocaleString()}</td>
+                          <td className="text-center text-blue font-semibold">{financials.capRate.toFixed(1)}%</td>
+                          <td className={`text-right font-semibold ${financials.cashFlow >= 0 ? '' : 'text-red'}`}>
+                            {financials.cashFlow >= 0 ? '' : '('}${Math.abs(Math.round(financials.cashFlow)).toLocaleString()}${financials.cashFlow >= 0 ? '' : ')'}
+                          </td>
+                          <td className={`text-center font-semibold ${financials.cashOnCash >= 0 ? '' : 'text-red'}`}>
+                            {financials.cashOnCash.toFixed(1)}%
+                          </td>
+                          <td className="value-add-text-cell">{prop.valueAddPotential || 'Stabilized property.'}</td>
+                          <td className="status-cell">
+                            <span className={`status-badge-lbl ${isPassed ? 'passed' : 'pursue'}`}>
+                              {prop.dealStatus || 'Passed'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="btn-print-pdf-green" onClick={() => window.print()}>
+                  🖨️ Print Underwriting Log
+                </button>
               </div>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
 
-      {/* Add / Edit Property Modal */}
+        {/* COMPARISON VIEW TAB */}
+        {activeSubTab === 'compare' && (
+          <div className="spreadsheet-view-container no-print">
+            {comparedPropertyIds.length === 0 ? (
+              <div className="empty-grid-state">
+                <span className="large-emoji-display">⚖️</span>
+                <h4>No properties selected for comparison</h4>
+                <p>Go back to the Search Listings view and select the balance icon (⚖️) on up to 3 listings to compare them.</p>
+              </div>
+            ) : (
+              <div className="spreadsheet-card-container">
+                <h2 className="spreadsheet-title">⚖️ Side-by-Side Underwriting Comparison</h2>
+                <table className="comparison-underwriting-table">
+                  <thead>
+                    <tr>
+                      <th>Feature Metric</th>
+                      {comparedPropertyIds.map(pid => {
+                        const prop = properties.find(p => p.id === pid)
+                        return <th key={pid} className="text-center">{prop?.address}</th>
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🏡 Basic Parameters</td></tr>
+                    <tr>
+                      <td className="lbl">Type</td>
+                      {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.type}</td>)}
+                    </tr>
+                    <tr>
+                      <td className="lbl">Market</td>
+                      {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.market}</td>)}
+                    </tr>
+                    <tr>
+                      <td className="lbl">Units</td>
+                      {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.units}</td>)}
+                    </tr>
+
+                    <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>💰 Underwriting Yields</td></tr>
+                    <tr>
+                      <td className="lbl">Monthly Rent</td>
+                      {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold">${properties.find(p => p.id === pid)?.rent.toLocaleString()}</td>)}
+                    </tr>
+                    <tr>
+                      <td className="lbl">Ask Price</td>
+                      {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold">${(properties.find(p => p.id === pid)?.purchasePrice ?? 320000).toLocaleString()}</td>)}
+                    </tr>
+                    <tr>
+                      <td className="lbl">Adjusted Cap Rate</td>
+                      {comparedPropertyIds.map(pid => {
+                        const prop = properties.find(p => p.id === pid)
+                        const roi = calculateROI(prop)
+                        return <td key={pid} className="text-center font-bold text-green">{roi.capRate.toFixed(2)}%</td>
+                      })}
+                    </tr>
+                    <tr>
+                      <td className="lbl">CoC Return</td>
+                      {comparedPropertyIds.map(pid => {
+                        const prop = properties.find(p => p.id === pid)
+                        const roi = calculateROI(prop)
+                        return <td key={pid} className={`text-center font-bold ${roi.cashOnCash >= 0 ? 'text-green' : 'text-red'}`}>{roi.cashOnCash.toFixed(2)}%</td>
+                      })}
+                    </tr>
+
+                    <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🌱 Location Hazard Profile</td></tr>
+                    <tr>
+                      <td className="lbl">Air Quality Index</td>
+                      {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.airQualityIndex ?? 32} AQI</td>)}
+                    </tr>
+                    <tr>
+                      <td className="lbl">Wildfire Risk</td>
+                      {comparedPropertyIds.map(pid => <td key={pid} className="text-center text-orange font-bold">{properties.find(p => p.id === pid)?.fireRisk ?? 'Low'}</td>)}
+                    </tr>
+                  </tbody>
+                </table>
+                
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                  <button onClick={() => setComparedPropertyIds([])} className="btn-print-pdf-green">Clear Selections</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+
+      {/* Add / Edit Listing Modal */}
       {showAddModal && (
         <div className="modal-overlay no-print">
           <div className="modal-content">
             <button className="modal-close" onClick={() => { setShowAddModal(false); resetForm(); }}>×</button>
-            <h3 className="modal-title">{editingProperty ? 'Edit Rental Listing' : 'Post New Rental Listing'}</h3>
-            <p className="modal-subtitle">Configure listing address, pricing, Zillow variables, and mortgage ROI parameters.</p>
+            <h3 className="modal-title">{editingProperty ? 'Edit Underwriting Listing' : 'Post Underwriting Listing'}</h3>
+            <p className="modal-subtitle">Fill in details to build cash flow sheet and map pins in Chicago.</p>
             
             <form onSubmit={handleFormSubmit} style={{ marginTop: '1.25rem' }} className="modal-scroll-form">
               
@@ -821,23 +950,21 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
                 <input
                   type="text"
                   required
-                  placeholder="e.g. 742 Evergreen Terrace, Springfield"
+                  placeholder="e.g. 1422 N La Salle Dr, Chicago, IL 60610"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   className="form-input"
                 />
               </div>
 
-              <div className="grid-2">
+              <div className="grid-3">
                 <div className="form-group">
-                  <label className="form-label">Property Type</label>
-                  <select value={type} onChange={(e) => setType(e.target.value)} className="form-select">
-                    <option value="Single Family">Single Family</option>
-                    <option value="Multi Family">Multi Family</option>
-                    <option value="Condo">Condo</option>
-                    <option value="Apartment">Apartment</option>
-                    <option value="Townhouse">Townhouse</option>
-                  </select>
+                  <label className="form-label">Market *</label>
+                  <input type="text" required placeholder="e.g. Uptown, Chicago" value={market} onChange={(e) => setMarket(e.target.value)} className="form-input" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Units *</label>
+                  <input type="number" required min="1" value={units} onChange={(e) => setUnits(parseInt(e.target.value) || 1)} className="form-input" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Monthly Rent ($) *</label>
@@ -853,47 +980,63 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
                 </div>
               </div>
 
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Property Type</label>
+                  <select value={type} onChange={(e) => setType(e.target.value)} className="form-select">
+                    <option value="Single Family">Single Family</option>
+                    <option value="Multi Family">Multi Family</option>
+                    <option value="Condo">Condo</option>
+                    <option value="Apartment">Apartment</option>
+                    <option value="Townhouse">Townhouse</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Deal Status</label>
+                  <select value={dealStatus} onChange={(e) => setDealStatus(e.target.value)} className="form-select">
+                    <option value="Passed">Passed</option>
+                    <option value="Passed at ask">Passed at ask</option>
+                    <option value="PURSUE - request T12">PURSUE - request T12</option>
+                    <option value="Pending - backup offer?">Pending - backup offer?</option>
+                    <option value="Pull rent roll">Pull rent roll</option>
+                    <option value="Verify listing">Verify listing</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="form-group">
-                <label className="form-label">Tenant Full Name (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="Vacant"
-                  value={tenantName}
-                  onChange={(e) => setTenantName(e.target.value)}
-                  className="form-input"
+                <label className="form-label">Value-Add Potential Description</label>
+                <textarea 
+                  value={valueAddPotential} 
+                  onChange={(e) => setValueAddPotential(e.target.value)} 
+                  className="form-input" 
+                  style={{ height: '70px', resize: 'vertical' }}
+                  placeholder="Notes on rent reposition, cosmetic renovation, heat bill-back..."
                 />
               </div>
 
-              {tenantName && (
-                <>
-                  <div className="form-group">
-                    <label className="form-label">Tenant Email</label>
-                    <input
-                      type="email"
-                      placeholder="e.g. tenant@domain.com"
-                      value={tenantEmail}
-                      onChange={(e) => setTenantEmail(e.target.value)}
-                      className="form-input"
-                    />
-                  </div>
+              <div className="form-group">
+                <label className="form-label">Tenant Full Name (Optional)</label>
+                <input type="text" placeholder="Vacant" value={tenantName} onChange={(e) => setTenantName(e.target.value)} className="form-input" />
+              </div>
 
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Lease Start</label>
-                      <input type="date" value={leaseStart} onChange={(e) => setLeaseStart(e.target.value)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Lease End</label>
-                      <input type="date" value={leaseEnd} onChange={(e) => setLeaseEnd(e.target.value)} className="form-input" />
-                    </div>
+              {tenantName && (
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">Lease Start</label>
+                    <input type="date" value={leaseStart} onChange={(e) => setLeaseStart(e.target.value)} className="form-input" />
                   </div>
-                </>
+                  <div className="form-group">
+                    <label className="form-label">Lease End</label>
+                    <input type="date" value={leaseEnd} onChange={(e) => setLeaseEnd(e.target.value)} className="form-input" />
+                  </div>
+                </div>
               )}
 
               <div className="prop-divider"></div>
               <h4 className="modal-section-title">📊 Acquisition & ROI Parameters</h4>
               
-              <div className="grid-2">
+              <div className="grid-3">
                 <div className="form-group">
                   <label className="form-label">Purchase Price ($)</label>
                   <input type="number" value={purchasePrice} onChange={(e) => setPurchasePrice(parseFloat(e.target.value) || 0)} className="form-input" />
@@ -907,77 +1050,30 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
                   <input type="number" step="0.01" value={interestRate} onChange={(e) => setInterestRate(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Loan Term (Years)</label>
-                  <input type="number" value={loanTermYears} onChange={(e) => setLoanTermYears(parseInt(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Annual Property Tax ($)</label>
+                  <label className="form-label">Annual Taxes ($/yr)</label>
                   <input type="number" value={annualPropertyTax} onChange={(e) => setAnnualPropertyTax(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Annual Insurance ($)</label>
+                  <label className="form-label">Annual Insurance ($/yr)</label>
                   <input type="number" value={annualInsurance} onChange={(e) => setAnnualInsurance(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Annual Maintenance ($)</label>
+                  <label className="form-label">Annual Maintenance ($/yr)</label>
                   <input type="number" value={annualMaintenance} onChange={(e) => setAnnualMaintenance(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Appreciation Rate (%)</label>
-                  <input type="number" value={appreciationRatePercent} onChange={(e) => setAppreciationRatePercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
               </div>
 
               <div className="prop-divider"></div>
-              <h4 className="modal-section-title">🎓 GreatSchools™ Nearby Ratings</h4>
-              
-              <div className="grid-3">
-                <div className="form-group">
-                  <label className="form-label">Elem. (1-10)</label>
-                  <input type="number" step="0.1" value={schoolElementary} onChange={(e) => setSchoolElementary(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Middle (1-10)</label>
-                  <input type="number" step="0.1" value={schoolMiddle} onChange={(e) => setSchoolMiddle(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">High (1-10)</label>
-                  <input type="number" step="0.1" value={schoolHigh} onChange={(e) => setSchoolHigh(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-              </div>
-
-              <div className="prop-divider"></div>
-              <h4 className="modal-section-title">🌱 Environment & Location Details</h4>
-
+              <h4 className="modal-section-title">📍 Map Coordinates (Chicago Area)</h4>
               <div className="grid-2">
                 <div className="form-group">
-                  <label className="form-label">Air Quality Index</label>
-                  <input type="number" value={airQualityIndex} onChange={(e) => setAirQualityIndex(parseInt(e.target.value) || 0)} className="form-input" />
+                  <label className="form-label">Latitude</label>
+                  <input type="number" step="0.0001" value={latitude} onChange={(e) => setLatitude(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Wildfire Risk</label>
-                  <select value={fireRisk} onChange={(e) => setFireRisk(e.target.value)} className="form-select">
-                    <option value="Very Low">Very Low</option>
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                  </select>
+                  <label className="form-label">Longitude</label>
+                  <input type="number" step="0.0001" value={longitude} onChange={(e) => setLongitude(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Soil Framework</label>
-                <input type="text" value={soilType} onChange={(e) => setSoilType(e.target.value)} className="form-input" />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Nearby Malls</label>
-                <input type="text" value={mallsNearby} onChange={(e) => setMallsNearby(e.target.value)} className="form-input" />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Nearby Forest Preserves</label>
-                <input type="text" value={forestPreserves} onChange={(e) => setForestPreserves(e.target.value)} className="form-input" />
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
@@ -994,677 +1090,811 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
         </div>
       )}
 
-      {/* Styled sheets specific for Zillow design */}
+      {/* Styled Sheets CSS overriding to Light Green & White Corporate Theme */}
       <style dangerouslySetInnerHTML={{__html: `
         :root {
-          --zillow-blue: #006aff;
-          --zillow-bg: #f6f6fa;
-          --zillow-border: #e4e4e7;
-          --zillow-text: #2a2a3e;
-          --zillow-text-secondary: #59596e;
+          --primary-green: #2e7d32;
+          --primary-hover: #1b5e20;
+          --light-green-bg: #f1f8e9;
+          --white: #ffffff;
+          --border-color: #cbd5e0;
+          --text-dark: #2d3748;
+          --text-muted: #718096;
         }
 
-        .zillow-platform-container {
-          background-color: var(--zillow-bg);
-          color: var(--zillow-text);
+        .realpal-dashboard-container {
+          display: flex;
+          background-color: #f4f7f6;
+          color: var(--text-dark);
           min-height: 100vh;
-          font-family: 'Open Sans', 'Inter', sans-serif;
-          display: flex;
-          flex-direction: column;
-        }
-
-        /* Zillow Brand Navigation */
-        .zillow-nav-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background: #fff;
-          border-bottom: 1px solid var(--zillow-border);
-          padding: 0.8rem 2rem;
-          height: 60px;
-        }
-
-        .zillow-brand-logo {
-          color: var(--zillow-blue);
-          font-size: 1.6rem;
-          font-weight: 900;
-          letter-spacing: -0.03em;
-        }
-
-        .rent-portal-tag {
-          font-size: 0.72rem;
-          background: rgba(0, 106, 255, 0.08);
-          color: var(--zillow-blue);
-          padding: 0.2rem 0.5rem;
-          border-radius: var(--radius-full);
-          font-weight: 700;
-          margin-left: 0.5rem;
-          text-transform: uppercase;
-        }
-
-        .nav-links {
-          display: flex;
-          align-items: center;
-          gap: 1.5rem;
-        }
-
-        .nav-links a {
-          color: var(--zillow-text);
-          text-decoration: none;
-          font-size: 0.92rem;
-          font-weight: 600;
-          transition: color 0.15s;
-        }
-
-        .nav-links a:hover, .nav-links a.active {
-          color: var(--zillow-blue);
-        }
-
-        .nav-links .divider {
-          width: 1px;
-          height: 20px;
-          background: var(--zillow-border);
-        }
-
-        .btn-zillow-primary {
-          background: var(--zillow-blue);
-          color: #fff;
-          border: none;
-          padding: 0.6rem 1.2rem;
-          border-radius: var(--radius-md);
-          font-weight: 700;
-          cursor: pointer;
-          font-size: 0.9rem;
-          transition: background 0.2s;
-        }
-
-        .btn-zillow-primary:hover {
-          background: #0056cc;
-        }
-
-        /* Filter Bar */
-        .zillow-filter-bar {
-          display: flex;
-          align-items: center;
-          background: #fff;
-          border-bottom: 1px solid var(--zillow-border);
-          padding: 0.75rem 2rem;
-          gap: 1.5rem;
-        }
-
-        .search-input-wrapper {
-          position: relative;
-          width: 320px;
-        }
-
-        .zillow-search-input {
-          width: 100%;
-          border: 1px solid var(--zillow-border);
-          padding: 0.55rem 1rem 0.55rem 2.2rem;
-          border-radius: var(--radius-md);
-          font-size: 0.9rem;
-          outline: none;
-          color: var(--zillow-text);
-        }
-
-        .search-icon {
-          position: absolute;
-          left: 0.8rem;
-          top: 50%;
-          transform: translateY(-50%);
-          color: var(--zillow-text-secondary);
-        }
-
-        .filter-dropdown-group {
-          display: flex;
-          gap: 1rem;
-        }
-
-        .filter-select-wrapper {
-          display: flex;
-          flex-direction: column;
-          font-size: 0.72rem;
-          color: var(--zillow-text-secondary);
-          font-weight: 700;
-        }
-
-        .zillow-select {
-          border: 1px solid var(--zillow-border);
-          padding: 0.35rem 0.8rem;
-          border-radius: var(--radius-md);
-          outline: none;
-          font-size: 0.85rem;
-          background: #fff;
-          font-weight: 600;
-          color: var(--zillow-text);
-          margin-top: 2px;
-        }
-
-        .listing-count-tag {
-          margin-left: auto;
-          font-size: 0.88rem;
-          font-weight: 700;
-          color: var(--zillow-text-secondary);
-        }
-
-        /* Split Screen Container */
-        .zillow-split-container {
-          display: flex;
-          flex: 1;
-          height: calc(100vh - 110px);
+          font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
           overflow: hidden;
         }
 
-        .zillow-left-listings-panel {
-          width: 55%;
+        /* 1. Vertical Sidebar */
+        .left-icon-sidebar {
+          width: 75px;
+          background: var(--white);
+          border-right: 1px solid var(--border-color);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 1.25rem 0;
+          flex-shrink: 0;
+        }
+
+        .sidebar-logo {
+          color: var(--primary-green);
+          font-size: 1.6rem;
+          font-weight: 900;
+          letter-spacing: -0.05em;
+          margin-bottom: 2rem;
+        }
+
+        .sidebar-icons-list {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+          width: 100%;
+          align-items: center;
+        }
+
+        .sidebar-icon-btn {
+          background: transparent;
+          border: none;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 0.25rem;
+          cursor: pointer;
+          width: 60px;
+          height: 60px;
+          border-radius: var(--radius-md);
+          color: var(--text-muted);
+          transition: all 0.15s;
+        }
+
+        .sidebar-icon-btn:hover, .sidebar-icon-btn.active {
+          color: var(--primary-green);
+          background: var(--light-green-bg);
+        }
+
+        .sidebar-icon-btn .lbl {
+          font-size: 0.65rem;
+          font-weight: 750;
+        }
+
+        /* Viewport content next to sidebar */
+        .main-viewport-content {
+          display: flex;
+          flex-direction: column;
+          flex: 1;
+          overflow: hidden;
+        }
+
+        /* 2. Top Navigation Bar */
+        .top-search-filter-bar {
+          display: flex;
+          align-items: center;
+          background: var(--white);
+          border-bottom: 1px solid var(--border-color);
+          padding: 0.8rem 2rem;
+          gap: 1.5rem;
+          height: 65px;
+          flex-shrink: 0;
+        }
+
+        .search-bar-input-box {
+          position: relative;
+          display: flex;
+          align-items: center;
+          width: 320px;
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          overflow: hidden;
+          background: var(--white);
+        }
+
+        .top-search-address-field {
+          width: 100%;
+          border: none;
+          padding: 0.55rem 1rem;
+          font-size: 0.88rem;
+          outline: none;
+          color: var(--text-dark);
+          font-weight: 600;
+        }
+
+        .clear-search-btn {
+          background: transparent;
+          border: none;
+          font-size: 1.1rem;
+          cursor: pointer;
+          color: var(--text-muted);
+          padding: 0 0.5rem;
+        }
+
+        .search-trigger-btn {
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          padding: 0 0.75rem;
+          color: var(--text-muted);
+        }
+
+        .top-dropdown-filters {
+          display: flex;
+          gap: 0.75rem;
+          align-items: center;
+        }
+
+        .top-dropdown-select {
+          border: 1px solid var(--border-color);
+          padding: 0.45rem 1rem;
+          border-radius: var(--radius-md);
+          outline: none;
+          font-size: 0.85rem;
+          background: var(--white);
+          font-weight: 600;
+          color: var(--text-dark);
+        }
+
+        .btn-filter-more {
+          background: var(--white);
+          border: 1px solid var(--border-color);
+          padding: 0.45rem 1rem;
+          border-radius: var(--radius-md);
+          font-size: 0.85rem;
+          font-weight: 600;
+          cursor: pointer;
+          color: var(--text-dark);
+        }
+
+        .btn-filter-more:hover {
+          background: #f7fafc;
+        }
+
+        .btn-save-search-green {
+          background: var(--primary-green);
+          color: var(--white);
+          border: none;
+          padding: 0.55rem 1.25rem;
+          border-radius: var(--radius-md);
+          font-weight: 750;
+          cursor: pointer;
+          font-size: 0.9rem;
+          margin-left: auto;
+          transition: background 0.15s;
+        }
+
+        .btn-save-search-green:hover {
+          background: var(--primary-hover);
+        }
+
+        /* 3. Split Screen Layout */
+        .dashboard-split-screen {
+          display: flex;
+          flex: 1;
+          height: calc(100vh - 65px);
+          overflow: hidden;
+        }
+
+        .split-left-map-viewport {
+          width: 50%;
+          height: 100%;
+          background: #e5e9f0;
+          border-right: 1px solid var(--border-color);
+        }
+
+        .split-right-listings-grid-pane {
+          width: 50%;
+          height: 100%;
+          position: relative;
+          background: var(--white);
+          overflow: hidden;
+        }
+
+        /* Scroller for listings grid */
+        .listings-grid-scroller {
+          height: 100%;
           overflow-y: auto;
           padding: 1.5rem;
-          border-right: 1px solid var(--zillow-border);
-          background: #fff;
         }
 
-        .listings-header {
+        .listings-scroller-header {
           display: flex;
-          justify-content: space-between;
-          align-items: center;
+          flex-direction: column;
           margin-bottom: 1.25rem;
+          gap: 0.25rem;
         }
 
-        .listings-header h2 {
-          font-size: 1.35rem;
-          font-weight: 800;
-          color: var(--zillow-text);
+        .listings-scroller-header h3 {
+          font-size: 1.25rem;
+          font-weight: 850;
+          color: var(--text-dark);
         }
 
-        .zillow-listings-grid {
+        .listings-scroller-header span {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          font-weight: 600;
+        }
+
+        .listings-two-col-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
           gap: 1.25rem;
         }
 
-        .zillow-listing-card {
-          border: 1px solid var(--zillow-border);
+        /* Listing Grid Card (Matching screenshot style) */
+        .listing-grid-card {
+          border: 1px solid var(--border-color);
           border-radius: var(--radius-md);
           overflow: hidden;
-          background: #fff;
+          background: var(--white);
           cursor: pointer;
           transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
         }
 
-        .zillow-listing-card:hover {
+        .listing-grid-card:hover {
           transform: translateY(-2px);
           box-shadow: var(--shadow-md);
-          border-color: var(--zillow-blue);
+          border-color: var(--primary-green);
         }
 
-        .zillow-listing-card.selected {
-          border-color: var(--zillow-blue);
-          box-shadow: 0 0 0 2px rgba(0, 106, 255, 0.15);
-        }
-
-        .card-image-box {
-          height: 140px;
-          background: linear-gradient(135deg, #006aff 0%, #a5b4fc 100%);
+        .card-media-gallery {
+          height: 150px;
+          background: linear-gradient(135deg, var(--primary-green) 0%, #a5d6a7 100%);
           position: relative;
-          display: flex;
-          align-items: center;
-          justify-content: center;
         }
 
-        .card-image-placeholder {
-          color: #fff;
-          font-weight: 750;
-          font-size: 0.95rem;
-          text-shadow: 0 2px 4px rgba(0,0,0,0.15);
-        }
-
-        .listing-type-badge {
+        .card-top-left-badge {
           position: absolute;
           left: 0.75rem;
           top: 0.75rem;
-          background: rgba(0,0,0,0.65);
-          color: #fff;
+          background: rgba(255, 255, 255, 0.9);
+          color: var(--text-dark);
+          font-size: 0.68rem;
+          font-weight: 800;
           padding: 0.25rem 0.5rem;
           border-radius: var(--radius-sm);
-          font-size: 0.65rem;
-          font-weight: 700;
-          text-transform: uppercase;
         }
 
-        .occupancy-badge {
+        .card-favorite-heart {
           position: absolute;
           right: 0.75rem;
           top: 0.75rem;
-          background: #38a169;
-          color: #fff;
-          padding: 0.25rem 0.5rem;
-          border-radius: var(--radius-sm);
-          font-size: 0.65rem;
-          font-weight: 700;
-        }
-
-        .compare-bubble-btn {
-          position: absolute;
-          right: 0.75rem;
-          bottom: 0.75rem;
-          background: #fff;
-          border: 1px solid var(--zillow-border);
-          border-radius: var(--radius-full);
-          padding: 0.35rem;
+          font-size: 1.1rem;
           cursor: pointer;
-          font-size: 0.75rem;
-          transition: all 0.15s;
+          filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
         }
 
-        .compare-bubble-btn:hover {
-          transform: scale(1.1);
+        /* Dots indicator overlay on image bottom */
+        .card-dots-carousel {
+          position: absolute;
+          bottom: 0.6rem;
+          left: 50%;
+          transform: translateX(-50%);
+          display: flex;
+          gap: 0.25rem;
         }
 
-        .compare-bubble-btn.active {
-          background: var(--zillow-blue);
-          color: #fff;
-          border-color: var(--zillow-blue);
+        .card-dots-carousel .dot {
+          width: 5px;
+          height: 5px;
+          background: rgba(255, 255, 255, 0.5);
+          border-radius: 50%;
         }
 
-        .card-info-box {
+        .card-dots-carousel .dot.active {
+          background: var(--white);
+          width: 6px;
+          height: 6px;
+        }
+
+        .card-description-box {
           padding: 1rem;
         }
 
-        .price-row .price {
+        .price-line h3 {
           font-size: 1.45rem;
           font-weight: 850;
-          color: var(--zillow-text);
+          color: var(--text-dark);
         }
 
-        .price-row .mo {
-          font-size: 0.85rem;
-          color: var(--zillow-text-secondary);
+        .details-line {
+          font-size: 0.82rem;
+          color: var(--text-dark);
           font-weight: 600;
-        }
-
-        .details-row {
-          font-size: 0.85rem;
-          color: var(--zillow-text-secondary);
           margin-top: 0.25rem;
         }
 
-        .address {
-          font-size: 0.9rem;
-          color: var(--zillow-text);
-          margin-top: 0.35rem;
-          font-weight: 600;
+        .address-line {
+          font-size: 0.88rem;
+          color: var(--text-muted);
+          font-weight: 650;
+          margin-top: 0.25rem;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
-        .zillow-mini-yields {
+        .agency-line {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          margin-top: 0.35rem;
+        }
+
+        .underwriting-badge-row {
           display: flex;
           gap: 0.5rem;
           margin-top: 0.6rem;
         }
 
-        .yield-pill {
+        .underwriting-badge-row .badge {
           font-size: 0.68rem;
           font-weight: 750;
           padding: 0.2rem 0.4rem;
           border-radius: var(--radius-sm);
         }
 
-        .yield-pill.cap {
-          background: rgba(0, 106, 255, 0.08);
-          color: var(--zillow-blue);
+        .underwriting-badge-row .badge.cap {
+          background: rgba(46, 125, 50, 0.08);
+          color: var(--primary-green);
         }
 
-        .yield-pill.coc {
+        .underwriting-badge-row .badge.coc {
           background: rgba(221, 107, 32, 0.08);
           color: #dd6b20;
         }
 
-        .environmental-strip {
-          display: flex;
-          gap: 0.4rem;
-          margin-top: 0.6rem;
-        }
-
-        .env-pill {
-          font-size: 0.65rem;
-          font-weight: 700;
-          padding: 0.15rem 0.35rem;
-          border-radius: var(--radius-sm);
-          background: #f7fafc;
-          border: 1px solid #edf2f7;
-          color: var(--zillow-text-secondary);
-        }
-
-        .card-actions-strip {
-          display: flex;
-          gap: 0.5rem;
-          margin-top: 0.85rem;
-          border-top: 1px solid #f4f4f5;
-          padding-top: 0.6rem;
-        }
-
-        .action-btn {
-          flex: 1;
-          background: transparent;
-          border: 1px solid var(--zillow-border);
-          padding: 0.35rem;
-          font-size: 0.78rem;
-          font-weight: 700;
-          border-radius: var(--radius-sm);
-          cursor: pointer;
-          color: var(--zillow-text-secondary);
-          transition: all 0.15s;
-        }
-
-        .action-btn:hover {
-          color: var(--zillow-text);
-          background: #f7fafc;
-        }
-
-        .delete-btn:hover {
-          border-color: #fc8181;
-          color: #e53e3e;
-          background: #fff5f5;
-        }
-
-        /* Right Panel: Detail Panel */
-        .zillow-right-detail-panel {
-          width: 45%;
-          background: #fff;
-          overflow-y: auto;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .zillow-listing-details-sheet {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .sheet-image-gallery {
-          height: 220px;
-          background: linear-gradient(135deg, #1a202c 0%, #4a5568 100%);
-          position: relative;
-        }
-
-        .main-gallery-pic {
+        /* 4. Sliding Detail Drawer (Slides from the right) */
+        .sliding-detail-drawer {
+          position: absolute;
+          left: 0;
+          top: 0;
           width: 100%;
           height: 100%;
+          background: var(--white);
+          z-index: 10;
           display: flex;
           flex-direction: column;
-          justify-content: flex-end;
-          padding: 1.5rem;
-          background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+          animation: slideIn 0.25s ease-out;
         }
 
-        .realpal-guarantee-shield {
-          position: absolute;
-          top: 1rem;
-          left: 1rem;
-          background: rgba(255,255,255,0.95);
-          color: var(--zillow-text);
-          font-size: 0.72rem;
-          font-weight: 800;
-          padding: 0.35rem 0.75rem;
-          border-radius: var(--radius-md);
-          box-shadow: var(--shadow-sm);
+        @keyframes slideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
         }
 
-        .prop-addr-overlay {
-          color: #fff;
-          font-size: 1.45rem;
-          font-weight: 850;
-          text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .sheet-body-content {
-          padding: 1.5rem;
-        }
-
-        .core-details-header {
+        .drawer-nav-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
+          padding: 0.8rem 1.5rem;
+          border-bottom: 1px solid var(--border-color);
+          background: var(--white);
         }
 
-        .price-rent-block h2 {
-          font-size: 1.85rem;
+        .btn-close-drawer {
+          background: transparent;
+          border: none;
+          color: var(--primary-green);
+          font-size: 0.95rem;
+          font-weight: 750;
+          cursor: pointer;
+        }
+
+        .btn-print-pdf-green {
+          background: var(--white);
+          border: 1px solid var(--primary-green);
+          color: var(--primary-green);
+          padding: 0.45rem 1rem;
+          border-radius: var(--radius-md);
+          font-weight: 750;
+          cursor: pointer;
+          font-size: 0.85rem;
+          transition: all 0.15s;
+        }
+
+        .btn-print-pdf-green:hover {
+          background: var(--light-green-bg);
+        }
+
+        .drawer-body-scrollable {
+          flex: 1;
+          overflow-y: auto;
+          padding: 1.5rem;
+        }
+
+        .drawer-hero-block h2 {
+          font-size: 1.4rem;
           font-weight: 850;
-          color: var(--zillow-text);
+          color: var(--text-dark);
         }
 
-        .price-rent-block p {
-          color: var(--zillow-text-secondary);
+        .drawer-hero-block p {
+          color: var(--text-muted);
           font-size: 0.88rem;
+          font-weight: 600;
           margin-top: 0.2rem;
         }
 
-        .yields-header-block {
-          display: flex;
-          gap: 1rem;
+        .badge-guarantee {
+          display: inline-block;
+          font-size: 0.65rem;
+          background: var(--light-green-bg);
+          color: var(--primary-green);
+          font-weight: 800;
+          padding: 0.2rem 0.5rem;
+          border-radius: var(--radius-sm);
+          text-transform: uppercase;
+          margin-bottom: 0.5rem;
         }
 
-        .yield-header-metric {
+        .yields-grid-row {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 0.75rem;
+          margin-top: 1rem;
+        }
+
+        .yield-mini-card {
           display: flex;
           flex-direction: column;
-          align-items: flex-end;
+          align-items: center;
+          background: var(--light-green-bg);
+          border: 1px solid rgba(46, 125, 50, 0.15);
+          padding: 0.6rem;
+          border-radius: var(--radius-md);
         }
 
-        .yield-header-metric .lbl {
-          font-size: 0.65rem;
-          font-weight: 700;
-          color: var(--zillow-text-secondary);
+        .yield-mini-card .lbl {
+          font-size: 0.68rem;
+          color: var(--text-muted);
+          font-weight: 750;
           text-transform: uppercase;
         }
 
-        .yield-header-metric .val {
-          font-size: 1.35rem;
+        .yield-mini-card .val {
+          font-size: 1.15rem;
           font-weight: 850;
-          color: var(--zillow-blue);
+          margin-top: 0.15rem;
         }
 
-        .yield-header-metric .val.text-orange {
-          color: #dd6b20;
+        .yield-mini-card .val.text-green {
+          color: var(--primary-green);
+        }
+
+        .yield-mini-card .val.text-red {
+          color: #e53e3e;
+        }
+
+        .underwriting-notes-panel {
+          background: #f7fafc;
+          border: 1px solid var(--border-color);
+          padding: 1rem;
+          border-radius: var(--radius-md);
+        }
+
+        .underwriting-notes-panel h4 {
+          font-size: 0.85rem;
+          font-weight: 800;
+          color: var(--text-dark);
+          text-transform: uppercase;
+          margin-bottom: 0.4rem;
+        }
+
+        .underwriting-notes-panel p {
+          font-size: 0.82rem;
+          line-height: 1.4;
+          color: var(--text-muted);
         }
 
         .prop-divider {
           height: 1px;
-          background: var(--zillow-border);
-          margin: 1.25rem 0;
+          background: var(--border-color);
+          margin: 1.5rem 0;
         }
 
-        .calculator-two-col-grid {
-          display: grid;
-          grid-template-columns: 1.2fr 0.8fr;
-          gap: 1.5rem;
-          align-items: start;
+        .section-title {
+          font-size: 0.88rem;
+          font-weight: 850;
+          color: var(--text-dark);
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          margin-bottom: 0.75rem;
         }
 
-        .calculator-inline-inputs {
+        .inline-calculator-block {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .inputs-strip {
           background: #f7fafc;
-          border: 1px solid var(--zillow-border);
+          border: 1px solid var(--border-color);
           border-radius: var(--radius-md);
           padding: 1rem;
         }
 
-        .form-grid-2 {
+        .form-grid-3 {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
+          grid-template-columns: repeat(3, 1fr);
           gap: 0.75rem;
         }
 
-        .inline-form-group {
+        .form-field-box {
           display: flex;
           flex-direction: column;
-          gap: 0.2rem;
+          gap: 0.15rem;
         }
 
-        .inline-form-group label {
-          font-size: 0.68rem;
-          color: var(--zillow-text-secondary);
+        .form-field-box label {
+          font-size: 0.65rem;
+          color: var(--text-muted);
           font-weight: 750;
         }
 
-        .inline-form-group input {
-          border: 1px solid var(--zillow-border);
+        .form-field-box input {
+          border: 1px solid var(--border-color);
           border-radius: var(--radius-sm);
           padding: 0.3rem 0.5rem;
           font-size: 0.82rem;
           outline: none;
-          color: var(--zillow-text);
+          color: var(--text-dark);
         }
 
-        .inline-form-group input:focus {
-          border-color: var(--zillow-blue);
+        .form-field-box input:focus {
+          border-color: var(--primary-green);
         }
 
-        .auto-save-tag {
-          font-size: 0.68rem;
-          color: #718096;
-          font-weight: 650;
-          margin-top: 0.75rem;
+        .auto-save-warning {
           text-align: center;
+          font-size: 0.65rem;
+          color: var(--text-muted);
+          margin-top: 0.55rem;
+          font-weight: 600;
         }
 
-        .compact-yields-table {
+        .compact-roi-yield-table {
           width: 100%;
           border-collapse: collapse;
           font-size: 0.85rem;
         }
 
-        .compact-yields-table td {
+        .compact-roi-yield-table td {
           padding: 0.45rem 0;
           border-bottom: 1px solid #edf2f7;
-          color: var(--zillow-text-secondary);
+          color: var(--text-muted);
         }
 
-        .compact-yields-table tr.border-top td {
-          border-top: 2px solid var(--zillow-text);
-          color: var(--zillow-text);
+        .compact-roi-yield-table tr.border-t td {
+          border-top: 2px solid var(--text-dark);
+          color: var(--text-dark);
           padding-top: 0.6rem;
         }
 
-        .schools-rating-grid {
+        .projections-log-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.8rem;
+        }
+
+        .projections-log-table th, .projections-log-table td {
+          padding: 0.5rem;
+          border-bottom: 1px solid #edf2f7;
+          text-align: left;
+        }
+
+        .projections-log-table th {
+          background: #f7fafc;
+          font-weight: 700;
+          color: var(--text-muted);
+        }
+
+        .schools-bars-group {
           display: flex;
           flex-direction: column;
           gap: 0.6rem;
         }
 
-        .environmental-table {
+        .school-rating-bar {
+          display: flex;
+          align-items: center;
+          font-size: 0.8rem;
+          gap: 0.5rem;
+        }
+
+        .school-lbl {
+          flex: 1.5;
+          color: var(--text-muted);
+          font-weight: 600;
+        }
+
+        .rating-track-wrapper {
+          flex: 2;
+          height: 6px;
+          background: rgba(0,0,0,0.06);
+          border-radius: var(--radius-full);
+          overflow: hidden;
+        }
+
+        .rating-track-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #ecc94b 0%, var(--primary-green) 100%);
+          border-radius: var(--radius-full);
+        }
+
+        .rating-num {
+          flex: 0.8;
+          text-align: right;
+          font-weight: 750;
+          color: var(--primary-green);
+        }
+
+        .env-summary-table {
           width: 100%;
           border-collapse: collapse;
           font-size: 0.85rem;
         }
 
-        .environmental-table td {
-          padding: 0.5rem 0;
+        .env-summary-table td {
+          padding: 0.45rem 0;
           border-bottom: 1px solid #edf2f7;
-          color: var(--zillow-text-secondary);
+          color: var(--text-muted);
         }
 
-        .environmental-table td:last-child {
-          color: var(--zillow-text);
+        .env-summary-table td:last-child {
           text-align: right;
+          color: var(--text-dark);
         }
 
-        .drawer-action-strip {
-          margin-top: 1.5rem;
-          display: flex;
-          justify-content: flex-end;
-        }
-
-        .no-detail-selected {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
+        /* Divicon circular pin on map (Hoffman Estates IL screenshot style) */
+        .custom-map-pin-badge {
+          background: var(--primary-green);
+          color: var(--white);
+          border: 2px solid var(--white);
+          border-radius: 12px;
+          font-size: 0.72rem;
+          font-weight: 850;
           text-align: center;
-          padding: 4rem 2rem;
+          line-height: 22px;
+          box-shadow: var(--shadow-sm);
         }
 
-        .search-logo-large {
-          font-size: 3.5rem;
-          color: #cbd5e0;
-          margin-bottom: 1rem;
-        }
-
-        .no-detail-selected h3 {
-          margin-bottom: 0.5rem;
-        }
-
-        .no-detail-selected p {
-          color: var(--zillow-text-secondary);
-        }
-
-        /* Zillow Compare Styles */
-        .zillow-compare-container {
+        /* 5. Spreadsheet View tab (uploaded image) */
+        .spreadsheet-view-container {
           padding: 2rem;
-          max-width: 1200px;
-          margin: 0 auto;
+          overflow-y: auto;
+          flex: 1;
         }
 
-        .zillow-compare-table {
+        .spreadsheet-card-container {
+          background: var(--white);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          padding: 2rem;
+        }
+
+        .spreadsheet-title {
+          font-size: 1.45rem;
+          font-weight: 850;
+          color: var(--text-dark);
+        }
+
+        .spreadsheet-subtitle {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          font-weight: 600;
+          margin-top: 0.2rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .spreadsheet-underwriting-table {
           width: 100%;
           border-collapse: collapse;
-          font-size: 0.88rem;
-          margin-top: 1rem;
-          background: #fff;
-          border: 1px solid var(--zillow-border);
-          border-radius: var(--radius-md);
+          font-size: 0.8rem;
         }
 
-        .zillow-compare-table th, .zillow-compare-table td {
-          padding: 0.85rem 1rem;
-          border-bottom: 1px solid var(--zillow-border);
+        .spreadsheet-underwriting-table th, .spreadsheet-underwriting-table td {
+          padding: 0.75rem 0.5rem;
+          border-bottom: 1px solid var(--border-color);
+          text-align: left;
         }
 
-        .zillow-compare-table th {
+        .spreadsheet-underwriting-table th {
+          background: #edf2f7;
+          color: var(--text-dark);
+          font-weight: 800;
+          font-size: 0.75rem;
+          text-transform: uppercase;
+        }
+
+        .spreadsheet-underwriting-table tr:hover {
           background: #f7fafc;
+        }
+
+        .value-add-text-cell {
+          font-size: 0.75rem;
+          line-height: 1.4;
+          color: var(--text-muted);
+          max-width: 260px;
+        }
+
+        .status-badge-lbl {
+          display: inline-block;
+          font-size: 0.65rem;
+          font-weight: 800;
+          padding: 0.2rem 0.5rem;
+          border-radius: var(--radius-sm);
+          text-transform: uppercase;
+        }
+
+        .status-badge-lbl.passed {
+          background: #edf2f7;
+          color: var(--text-dark);
+        }
+
+        .status-badge-lbl.pursue {
+          background: #feebc8;
+          color: #c05621;
+        }
+
+        /* Comparison table */
+        .comparison-underwriting-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.85rem;
+        }
+
+        .comparison-underwriting-table th, .comparison-underwriting-table td {
+          padding: 0.75rem 1rem;
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .comparison-underwriting-table th {
+          background: #edf2f7;
           font-weight: bold;
         }
 
-        .zillow-compare-table tr.section-row td {
-          background: #edf2f7;
-          font-weight: 800;
+        .comparison-underwriting-table tr.section-row td {
+          background: var(--light-green-bg);
+          font-weight: 850;
+          color: var(--primary-green);
+          font-size: 0.75rem;
           text-transform: uppercase;
-          font-size: 0.72rem;
-          letter-spacing: 0.05em;
         }
 
-        .btn-zillow-outline {
-          background: transparent;
-          border: 1px solid var(--zillow-blue);
-          color: var(--zillow-blue);
-          padding: 0.5rem 1rem;
-          border-radius: var(--radius-md);
+        .comparison-underwriting-table .lbl {
           font-weight: 700;
-          cursor: pointer;
-          font-size: 0.85rem;
-          transition: background 0.15s;
+          color: var(--text-muted);
         }
 
-        .btn-zillow-outline:hover {
-          background: rgba(0, 106, 255, 0.04);
-        }
+        /* Utility classes */
+        .text-green { color: var(--primary-green) !important; }
+        .text-red { color: #e53e3e !important; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .font-semibold { font-weight: 650; }
+        .font-bold { font-weight: 750; }
+        .table-responsive { overflow-x: auto; }
 
-        .zillow-empty-state {
+        .empty-grid-state {
           text-align: center;
-          padding: 4rem 2rem;
+          padding: 5rem 2rem;
         }
 
-        .house-emoji {
+        .large-emoji-display {
           font-size: 3rem;
           margin-bottom: 1rem;
           display: block;
         }
 
-        /* Print Media Override */
-        .sheet-header-print {
-          display: none;
-        }
+        /* Print Override */
+        .print-header { display: none; }
 
         @media print {
           body * {
@@ -1682,26 +1912,14 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
             color: #000 !important;
             padding: 0 !important;
             margin: 0 !important;
+            box-shadow: none !important;
             border: none !important;
           }
-          .sheet-header-print {
+          .print-header {
             display: block !important;
-            margin-bottom: 1.5rem;
             border-bottom: 2px solid #000;
+            margin-bottom: 1.5rem;
             padding-bottom: 0.5rem;
-          }
-          .sheet-header-print h1 {
-            font-size: 20pt;
-            font-weight: bold;
-            margin: 0;
-          }
-          .sheet-header-print .address {
-            font-size: 14pt;
-            margin: 4px 0;
-          }
-          .sheet-header-print .date {
-            font-size: 9pt;
-            color: #555;
           }
           .no-print {
             display: none !important;

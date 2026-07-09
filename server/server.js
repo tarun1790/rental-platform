@@ -49,7 +49,7 @@ app.post('/api/properties', async (req, res) => {
       annualMaintenance, maintenanceIncreasePercent, otherExpenses, otherExpensesIncreasePercent,
       vacancyRatePercent, managementFeePercent, appreciationRatePercent, holdingPeriodYears, sellingCostPercent,
       schoolElementary, schoolMiddle, schoolHigh, airQualityIndex, fireRisk, soilType, mallsNearby, forestPreserves,
-      latitude, longitude
+      latitude, longitude, market, units, valueAddPotential, dealStatus
     } = req.body
 
     const result = await dbQuery.run(
@@ -60,8 +60,8 @@ app.post('/api/properties', async (req, res) => {
         annualMaintenance, maintenanceIncreasePercent, otherExpenses, otherExpensesIncreasePercent,
         vacancyRatePercent, managementFeePercent, appreciationRatePercent, holdingPeriodYears, sellingCostPercent,
         schoolElementary, schoolMiddle, schoolHigh, airQualityIndex, fireRisk, soilType, mallsNearby, forestPreserves,
-        latitude, longitude
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        latitude, longitude, market, units, valueAddPotential, dealStatus
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         address, type, parseFloat(rent) || 0, tenantName || 'Vacant', tenantEmail || '-', leaseStart || '', leaseEnd || '', tenantName ? status : 'Vacant',
         parseFloat(purchasePrice) || 0, parseFloat(downPaymentPercent) || 0, parseFloat(interestRate) || 0, parseInt(loanTermYears) || 0, parseFloat(otherPurchaseCosts) || 0, parseFloat(repairCost) || 0,
@@ -69,7 +69,8 @@ app.post('/api/properties', async (req, res) => {
         parseFloat(annualMaintenance) || 0, parseFloat(maintenanceIncreasePercent) || 0, parseFloat(otherExpenses) || 0, parseFloat(otherExpensesIncreasePercent) || 0,
         parseFloat(vacancyRatePercent) || 0, parseFloat(managementFeePercent) || 0, parseFloat(appreciationRatePercent) || 0, parseInt(holdingPeriodYears) || 0, parseFloat(sellingCostPercent) || 0,
         parseFloat(schoolElementary) || 0, parseFloat(schoolMiddle) || 0, parseFloat(schoolHigh) || 0, parseInt(airQualityIndex) || 0, fireRisk || 'Low', soilType || 'Unknown', mallsNearby || 'None', forestPreserves || 'None',
-        parseFloat(latitude) || 0, parseFloat(longitude) || 0
+        parseFloat(latitude) || 0, parseFloat(longitude) || 0,
+        market || 'Chicago', parseInt(units) || 1, valueAddPotential || '', dealStatus || 'Passed'
       ]
     )
     const newProp = await dbQuery.get('SELECT * FROM properties WHERE id = ?', [result.id])
@@ -88,7 +89,7 @@ app.put('/api/properties/:id', async (req, res) => {
       annualMaintenance, maintenanceIncreasePercent, otherExpenses, otherExpensesIncreasePercent,
       vacancyRatePercent, managementFeePercent, appreciationRatePercent, holdingPeriodYears, sellingCostPercent,
       schoolElementary, schoolMiddle, schoolHigh, airQualityIndex, fireRisk, soilType, mallsNearby, forestPreserves,
-      latitude, longitude
+      latitude, longitude, market, units, valueAddPotential, dealStatus
     } = req.body
     const propId = req.params.id
     
@@ -100,7 +101,7 @@ app.put('/api/properties/:id', async (req, res) => {
         annualMaintenance = ?, maintenanceIncreasePercent = ?, otherExpenses = ?, otherExpensesIncreasePercent = ?,
         vacancyRatePercent = ?, managementFeePercent = ?, appreciationRatePercent = ?, holdingPeriodYears = ?, sellingCostPercent = ?,
         schoolElementary = ?, schoolMiddle = ?, schoolHigh = ?, airQualityIndex = ?, fireRisk = ?, soilType = ?, mallsNearby = ?, forestPreserves = ?,
-        latitude = ?, longitude = ?
+        latitude = ?, longitude = ?, market = ?, units = ?, valueAddPotential = ?, dealStatus = ?
        WHERE id = ?`,
       [
         address, type, parseFloat(rent) || 0, tenantName || 'Vacant', tenantEmail || '-', leaseStart || '', leaseEnd || '', tenantName ? status : 'Vacant',
@@ -110,6 +111,7 @@ app.put('/api/properties/:id', async (req, res) => {
         parseFloat(vacancyRatePercent) || 0, parseFloat(managementFeePercent) || 0, parseFloat(appreciationRatePercent) || 0, parseInt(holdingPeriodYears) || 0, parseFloat(sellingCostPercent) || 0,
         parseFloat(schoolElementary) || 0, parseFloat(schoolMiddle) || 0, parseFloat(schoolHigh) || 0, parseInt(airQualityIndex) || 0, fireRisk || 'Low', soilType || 'Unknown', mallsNearby || 'None', forestPreserves || 'None',
         parseFloat(latitude) || 0, parseFloat(longitude) || 0,
+        market || 'Chicago', parseInt(units) || 1, valueAddPotential || '', dealStatus || 'Passed',
         propId
       ]
     )
