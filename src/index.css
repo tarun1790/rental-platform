@@ -1,43 +1,43 @@
-/* RealPal Global Design System - Luffy AI Inspired Colors */
+/* RealPal Global Design System - White and Light Green Corporate Theme */
 :root {
-  /* Color Palette (Pure Black with character accents) */
-  --bg-primary: #000000;
-  --bg-secondary: #0a0a0a;
-  --bg-card: rgba(18, 18, 18, 0.85);
-  --bg-card-hover: rgba(28, 28, 28, 0.95);
-  --border-color: rgba(255, 255, 255, 0.07);
-  --border-color-active: rgba(229, 62, 62, 0.45); /* Red border active */
+  /* Color Palette (White and Light Green) */
+  --bg-primary: #f4f7f6;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fcfdfc;
+  --border-color: #cbd5e0;
+  --border-color-active: #2e7d32;
   
-  /* Accent Colors (Luffy One Piece Palette) */
-  --color-primary: #e53e3e; /* Luffy Red */
-  --color-primary-hover: #c53030;
-  --color-primary-light: rgba(229, 62, 62, 0.15);
+  /* Accent Colors (Green Theme) */
+  --color-primary: #2e7d32; 
+  --color-primary-hover: #1b5e20;
+  --color-primary-light: rgba(46, 125, 50, 0.08);
   
-  --color-success: #38a169; /* Forrest Green */
+  --color-success: #38a169;
   --color-success-hover: #2f855a;
   --color-success-light: rgba(56, 161, 105, 0.12);
   
-  --color-warning: #ecc94b; /* Straw-Hat Gold/Yellow */
+  --color-warning: #ecc94b;
   --color-warning-hover: #d69e2e;
   --color-warning-light: rgba(236, 201, 75, 0.12);
   
-  --color-danger: #e53e3e; /* Matches Red */
+  --color-danger: #e53e3e;
   --color-danger-hover: #c53030;
   --color-danger-light: rgba(229, 62, 62, 0.12);
   
-  --color-info: #3182ce; /* Ocean Blue */
+  --color-info: #3182ce;
   --color-info-light: rgba(49, 130, 206, 0.12);
   
   /* Text Colors */
-  --text-primary: #ffffff;
-  --text-secondary: #e0e0e0;
-  --text-muted: #a0aec0;
+  --text-primary: #2d3748;
+  --text-secondary: #4a5568;
+  --text-muted: #718096;
   
   /* Elevation & Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
-  --shadow-glow: 0 0 20px rgba(229, 62, 62, 0.15); /* Red glow */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-glow: 0 0 20px rgba(46, 125, 50, 0.05);
   
   /* Border Radius */
   --radius-sm: 6px;
@@ -79,19 +79,19 @@ body {
   background: var(--bg-primary);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.12);
   border-radius: var(--radius-full);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.25);
 }
 
 /* Layout Utilities */
 .app-container {
   display: flex;
   min-height: 100vh;
-  background: radial-gradient(circle at 80% 20%, rgba(229, 62, 62, 0.05) 0%, transparent 40%),
-              radial-gradient(circle at 20% 80%, rgba(49, 130, 206, 0.03) 0%, transparent 40%);
+  background: radial-gradient(circle at 80% 20%, rgba(46, 125, 50, 0.04) 0%, transparent 40%),
+              radial-gradient(circle at 20% 80%, rgba(74, 85, 104, 0.02) 0%, transparent 40%);
 }
 
 .main-content {
@@ -314,8 +314,8 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background-color: #000000; /* Pure Black Background */
-  color: #ffffff;
+  background-color: #ffffff; /* Pure White Background */
+  color: #2d3748;
   text-align: center;
   padding: 2rem;
   box-sizing: border-box;
@@ -331,9 +331,9 @@ h1, h2, h3, h4, h5, h6 {
   font-family: 'Courier New', Courier, monospace;
   font-size: 4rem;
   font-weight: 900;
-  color: #ffffff; /* White letters */
-  text-shadow: 0 0 2px #ffffff, 0 0 1px #ffffff; /* Heavy bolding effect */
-  border-right: 4px solid #ffffff; /* Cursor */
+  color: #2e7d32; /* Green letters */
+  text-shadow: 0 0 2px #2e7d32, 0 0 1px #2e7d32; /* Heavy bolding effect */
+  border-right: 4px solid #2e7d32; /* Cursor */
   white-space: nowrap;
   overflow: hidden;
   margin: 0 auto;
@@ -349,7 +349,7 @@ h1, h2, h3, h4, h5, h6 {
   font-family: 'Courier New', Courier, monospace;
   font-size: 1.25rem;
   font-weight: 700;
-  color: #a0aec0;
+  color: #4a5568;
   border-right: 3px solid transparent;
   white-space: normal;
   overflow: hidden;

@@ -92,7 +92,7 @@ export default function DashboardView({ properties, reminders, jobs, groupDeals,
 
         {/* KPI 4 */}
         <div className="glass-card kpi-card" onClick={() => setActiveTab('reminders')}>
-          <div className="kpi-icon-wrapper" style={{ background: 'rgba(255,255,255,0.05)', color: '#fff' }}>
+          <div className="kpi-icon-wrapper" style={{ background: 'rgba(46, 125, 50, 0.08)', color: 'var(--primary-green)' }}>
             🔔
           </div>
           <div className="kpi-info">
@@ -278,7 +278,7 @@ export default function DashboardView({ properties, reminders, jobs, groupDeals,
         .kpi-val {
           font-size: 1.65rem;
           font-weight: 850;
-          color: #fff;
+          color: var(--text-primary);
           line-height: 1.1;
           display: flex;
           align-items: center;
@@ -310,7 +310,7 @@ export default function DashboardView({ properties, reminders, jobs, groupDeals,
         }
 
         .svg-chart-container {
-          background: rgba(0, 0, 0, 0.4);
+          background: #f7fafc;
           border: 1px solid var(--border-color);
           border-radius: var(--radius-sm);
           padding: 1rem;
@@ -352,7 +352,7 @@ export default function DashboardView({ properties, reminders, jobs, groupDeals,
 
         .alert-item {
           padding: 1rem;
-          background: rgba(0,0,0,0.2);
+          background: #f7fafc;
           cursor: pointer;
           border-left: 3px solid transparent;
         }
@@ -373,7 +373,7 @@ export default function DashboardView({ properties, reminders, jobs, groupDeals,
         .alert-item-title {
           font-size: 0.95rem;
           font-weight: 750;
-          color: #fff;
+          color: var(--text-primary);
           margin-top: 0.35rem;
         }
 

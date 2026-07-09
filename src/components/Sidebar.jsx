@@ -86,8 +86,8 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
           <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="url(#logo-grad)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <defs>
               <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#ecc94b" />
-                <stop offset="100%" stopColor="#e53e3e" />
+                <stop offset="0%" stopColor="#81c784" />
+                <stop offset="100%" stopColor="#2e7d32" />
               </linearGradient>
             </defs>
             <path d="M3 21h18M3 10l9-7 9 7v11H3V10z" />
@@ -95,7 +95,7 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
           </svg>
         </div>
         <div>
-          <h2>RealPal</h2>
+          <h2 style={{ color: 'var(--primary-green)' }}>RealPal</h2>
           <span className="brand-tagline">Trusted Companion</span>
         </div>
       </div>
@@ -162,10 +162,10 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
         }
 
         .brand-logo {
-          background: rgba(229, 62, 62, 0.08);
+          background: rgba(46, 125, 50, 0.08);
           padding: 0.5rem;
           border-radius: var(--radius-sm);
-          border: 1px solid rgba(229, 62, 62, 0.2);
+          border: 1px solid rgba(46, 125, 50, 0.2);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -175,9 +175,7 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
           font-size: 1.35rem;
           font-weight: 800;
           letter-spacing: -0.02em;
-          background: linear-gradient(135deg, #fff 40%, var(--text-muted) 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
+          color: var(--primary-green) !important;
         }
 
         .brand-tagline {
@@ -189,8 +187,8 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
         }
 
         .sidebar-vision {
-          background: rgba(255, 255, 255, 0.01);
-          border: 1px solid rgba(255, 255, 255, 0.03);
+          background: rgba(46, 125, 50, 0.02);
+          border: 1px solid rgba(46, 125, 50, 0.05);
           border-radius: var(--radius-md);
           padding: 1rem;
           margin-bottom: 2rem;
@@ -199,7 +197,7 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
         .vision-title {
           font-size: 0.7rem;
           font-weight: 800;
-          color: var(--color-primary);
+          color: var(--primary-green);
           letter-spacing: 0.05em;
           margin-bottom: 0.4rem;
         }
@@ -236,14 +234,14 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
         }
 
         .nav-item:hover {
-          color: #fff;
-          background: rgba(255, 255, 255, 0.03);
+          color: var(--primary-green);
+          background: rgba(46, 125, 50, 0.04);
         }
 
         .nav-item.active {
-          color: #fff;
+          color: var(--primary-green);
           background: var(--color-primary-light);
-          border-left: 3px solid var(--color-primary);
+          border-left: 3px solid var(--primary-green);
         }
 
         .nav-icon {
@@ -253,7 +251,7 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
         }
 
         .nav-item.active .nav-icon {
-          color: var(--color-primary);
+          color: var(--primary-green);
           opacity: 1;
         }
 
@@ -278,12 +276,12 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
           width: 36px;
           height: 36px;
           border-radius: 50%;
-          background: rgba(229, 62, 62, 0.1);
-          color: var(--color-primary);
+          background: rgba(46, 125, 50, 0.1);
+          color: var(--primary-green);
           display: flex;
           align-items: center;
           justify-content: center;
-          border: 1px solid rgba(229, 62, 62, 0.2);
+          border: 1px solid rgba(46, 125, 50, 0.2);
         }
 
         .user-info {
@@ -294,7 +292,7 @@ export default function Sidebar({ activeTab, setActiveTab, subscription }) {
         .user-name {
           font-size: 0.875rem;
           font-weight: 700;
-          color: #fff;
+          color: var(--text-primary);
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;

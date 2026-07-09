@@ -246,7 +246,7 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
           bottom: 2rem;
           background: none;
           border: none;
-          color: #ffffff;
+          color: var(--text-primary);
           cursor: pointer;
           display: flex;
           flex-direction: column;
@@ -287,7 +287,10 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
           gap: 2.5rem;
           margin-bottom: 2.5rem;
           padding: 2.5rem;
-          background: linear-gradient(135deg, rgba(18, 18, 18, 0.95) 0%, rgba(5, 5, 5, 0.95) 100%);
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          box-shadow: var(--shadow-md);
         }
 
         .hero-text-content {
@@ -321,7 +324,7 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
         }
 
         .concept-stat-box {
-          background: rgba(255, 255, 255, 0.02);
+          background: rgba(46, 125, 50, 0.02);
           border: 1px solid var(--border-color);
           border-radius: var(--radius-md);
           padding: 1.5rem;
@@ -331,8 +334,8 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
         }
 
         .concept-stat-box.accent-box {
-          border-color: var(--border-color-active);
-          background: rgba(229, 62, 62, 0.04);
+          border-color: var(--primary-green);
+          background: rgba(46, 125, 50, 0.04);
         }
 
         .stat-num {
@@ -375,14 +378,14 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
         .calc-slider-wrapper {
           width: 100%;
           margin: 1.5rem 0;
-          background: rgba(0, 0, 0, 0.3);
+          background: #f7fafc;
           padding: 1.25rem;
           border-radius: var(--radius-md);
-          border: 1px solid rgba(255, 255, 255, 0.03);
+          border: 1px solid var(--border-color);
         }
 
         .slider-val {
-          color: var(--color-warning);
+          color: var(--primary-green);
           font-weight: 700;
           font-size: 1.05rem;
         }
@@ -392,7 +395,7 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
           -webkit-appearance: none;
           height: 6px;
           border-radius: var(--radius-full);
-          background: rgba(255, 255, 255, 0.15);
+          background: rgba(0, 0, 0, 0.08);
           outline: none;
           margin-top: 0.75rem;
         }
@@ -421,7 +424,7 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
         }
 
         .savings-item {
-          background: rgba(0, 0, 0, 0.3);
+          background: #f7fafc;
           padding: 1rem;
           border-radius: var(--radius-sm);
           text-align: center;
@@ -443,7 +446,7 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
         .savings-val {
           font-size: 1.35rem;
           font-weight: 800;
-          color: #fff;
+          color: var(--text-primary);
         }
 
         .highlight-savings .savings-val {
@@ -466,19 +469,18 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
           border: 1px solid var(--border-color);
           border-radius: var(--radius-sm);
           padding: 0.9rem 1.2rem;
-          background: rgba(0, 0, 0, 0.2);
+          background: #f7fafc;
           cursor: pointer;
           transition: all var(--transition-fast);
         }
 
         .problem-item:hover {
-          background: rgba(255, 255, 255, 0.02);
-          border-color: rgba(255, 255, 255, 0.12);
+          background: rgba(0, 0, 0, 0.02);
         }
 
         .problem-item.expanded {
-          border-color: var(--border-color-active);
-          background: rgba(229, 62, 62, 0.02);
+          border-color: var(--primary-green);
+          background: rgba(46, 125, 50, 0.02);
         }
 
         .problem-header {
@@ -493,7 +495,7 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
 
         .prob-title {
           font-weight: 600;
-          color: #fff;
+          color: var(--text-primary);
           flex: 1;
         }
 
@@ -508,7 +510,7 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
           font-size: 0.88rem;
           line-height: 1.5;
           padding-left: 1.9rem;
-          border-left: 2px solid var(--color-primary);
+          border-left: 2px solid var(--primary-green);
         }
 
         .pricing-card {
@@ -516,18 +518,19 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
           display: flex;
           flex-direction: column;
           padding: 2.25rem 2rem;
-          background: rgba(10, 10, 10, 0.8);
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
         }
 
         .pricing-card.premium-card {
-          background: linear-gradient(180deg, rgba(229, 62, 62, 0.06) 0%, rgba(10, 10, 10, 0.8) 100%);
-          border-color: var(--color-primary);
-          box-shadow: 0 10px 30px -10px rgba(229, 62, 62, 0.2);
+          background: linear-gradient(180deg, rgba(46, 125, 50, 0.04) 0%, var(--bg-secondary) 100%);
+          border-color: var(--primary-green);
+          box-shadow: 0 10px 30px -10px rgba(46, 125, 50, 0.1);
         }
 
         .active-plan {
           border-color: var(--color-warning);
-          box-shadow: 0 0 15px rgba(236, 201, 75, 0.1);
+          box-shadow: 0 0 15px rgba(236, 201, 75, 0.15);
         }
 
         .active-tag {
@@ -547,7 +550,7 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
           position: absolute;
           top: 1rem;
           right: 1.5rem;
-          background-color: var(--color-primary);
+          background-color: var(--primary-green);
           color: #fff;
           font-size: 0.7rem;
           font-weight: 700;
@@ -558,14 +561,14 @@ export default function LandingView({ subscription, setSubscription, setActiveTa
         .plan-name {
           font-size: 1.15rem;
           font-weight: 700;
-          color: #fff;
+          color: var(--text-primary);
           margin-bottom: 0.5rem;
         }
 
         .plan-price {
           font-size: 2.25rem;
           font-weight: 800;
-          color: #fff;
+          color: var(--text-primary);
           margin-bottom: 0.75rem;
         }
 
