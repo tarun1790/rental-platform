@@ -45,6 +45,23 @@ export const dbQuery = {
 
 export async function initDb() {
   console.log('Initializing RealPal Database...')
+
+  // Detect and perform schema upgrade if properties table is outdated
+  try {
+    const tableInfo = await dbQuery.all("PRAGMA table_info(properties)");
+    const hasPurchasePrice = tableInfo.some(col => col.name === 'purchasePrice');
+    if (tableInfo.length > 0 && !hasPurchasePrice) {
+      console.log('Detected outdated properties schema. Upgrading database...');
+      await dbQuery.run('DROP TABLE IF EXISTS properties');
+      await dbQuery.run('DROP TABLE IF EXISTS reminders');
+      await dbQuery.run('DROP TABLE IF EXISTS jobs');
+      await dbQuery.run('DROP TABLE IF EXISTS bids');
+      await dbQuery.run('DROP TABLE IF EXISTS group_deals');
+      await dbQuery.run('DROP TABLE IF EXISTS feedback');
+    }
+  } catch (err) {
+    console.error('Error checking schema:', err);
+  }
   
   // 1. Settings Table
   await dbQuery.run(`
@@ -54,7 +71,7 @@ export async function initDb() {
     )
   `)
 
-  // 2. Properties Table
+  // 2. Properties Table (Upgraded with ROI and Zillow-like fields)
   await dbQuery.run(`
     CREATE TABLE IF NOT EXISTS properties (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +82,38 @@ export async function initDb() {
       tenantEmail TEXT,
       leaseStart TEXT,
       leaseEnd TEXT,
-      status TEXT
+      status TEXT,
+      purchasePrice REAL,
+      downPaymentPercent REAL,
+      interestRate REAL,
+      loanTermYears INTEGER,
+      otherPurchaseCosts REAL,
+      repairCost REAL,
+      annualPropertyTax REAL,
+      taxIncreasePercent REAL,
+      annualInsurance REAL,
+      insuranceIncreasePercent REAL,
+      monthlyHOA REAL,
+      hoaIncreasePercent REAL,
+      annualMaintenance REAL,
+      maintenanceIncreasePercent REAL,
+      otherExpenses REAL,
+      otherExpensesIncreasePercent REAL,
+      vacancyRatePercent REAL,
+      managementFeePercent REAL,
+      appreciationRatePercent REAL,
+      holdingPeriodYears INTEGER,
+      sellingCostPercent REAL,
+      schoolElementary REAL,
+      schoolMiddle REAL,
+      schoolHigh REAL,
+      airQualityIndex INTEGER,
+      fireRisk TEXT,
+      soilType TEXT,
+      mallsNearby TEXT,
+      forestPreserves TEXT,
+      latitude REAL,
+      longitude REAL
     )
   `)
 
@@ -95,7 +143,8 @@ export async function initDb() {
       budget REAL,
       status TEXT,
       datePosted TEXT,
-      acceptedBid TEXT
+      acceptedBid TEXT,
+      savings REAL DEFAULT 0
     )
   `)
 
@@ -150,10 +199,36 @@ export async function initDb() {
 
     // Seed Properties
     await dbQuery.run(`
-      INSERT INTO properties (id, address, type, rent, tenantName, tenantEmail, leaseStart, leaseEnd, status) VALUES
-      (1, '1208 Whispering Pines Dr, San Jose, CA 94043', 'Single Family', 3200, 'John Herman', 'john.herman@gmail.com', '2025-01-01', '2026-12-31', 'Occupied'),
-      (2, '450 Ocean Breeze Ave, Apt 3B, Santa Monica, CA 90025', 'Apartment', 2200, 'Sarah Jenkins', 'sarah.j@outlook.com', '2025-07-01', '2026-06-30', 'Occupied'),
-      (3, '789 Summit Boulevard, Condominium 12, Seattle, WA 98101', 'Condo', 2400, 'Vacant', '-', '', '', 'Vacant')
+      INSERT INTO properties (
+        id, address, type, rent, tenantName, tenantEmail, leaseStart, leaseEnd, status,
+        purchasePrice, downPaymentPercent, interestRate, loanTermYears, otherPurchaseCosts, repairCost,
+        annualPropertyTax, taxIncreasePercent, annualInsurance, insuranceIncreasePercent, monthlyHOA, hoaIncreasePercent,
+        annualMaintenance, maintenanceIncreasePercent, otherExpenses, otherExpensesIncreasePercent,
+        vacancyRatePercent, managementFeePercent, appreciationRatePercent, holdingPeriodYears, sellingCostPercent,
+        schoolElementary, schoolMiddle, schoolHigh, airQualityIndex, fireRisk, soilType, mallsNearby, forestPreserves,
+        latitude, longitude
+      ) VALUES
+      (1, '1208 Whispering Pines Dr, San Jose, CA 94043', 'Single Family', 3200, 'John Herman', 'john.herman@gmail.com', '2025-01-01', '2026-12-31', 'Occupied',
+       320000, 25, 7.0, 30, 6000, 20000,
+       9000, 3, 1200, 3, 0, 3,
+       2000, 3, 500, 3,
+       5, 0, 3, 5, 5,
+       8.5, 9.0, 8.8, 32, 'Low', 'Clay loam, stable', 'Westfield Valley Fair, Santana Row', 'Alum Rock Park, Sierra Vista Open Space',
+       37.3382, -121.8863),
+      (2, '450 Ocean Breeze Ave, Apt 3B, Santa Monica, CA 90025', 'Apartment', 2200, 'Sarah Jenkins', 'sarah.j@outlook.com', '2025-07-01', '2026-06-30', 'Occupied',
+       280000, 20, 6.8, 30, 5000, 5000,
+       3600, 2, 900, 2, 250, 2,
+       1500, 2, 300, 2,
+       4, 8, 4, 10, 6,
+       9.0, 8.5, 9.2, 45, 'Very Low', 'Sandy loam, stable', 'Santa Monica Place, Third Street Promenade', 'Santa Monica Mountains Recreation Area',
+       34.0194, -118.4912),
+      (3, '789 Summit Boulevard, Condominium 12, Seattle, WA 98101', 'Condo', 2400, 'Vacant', '-', '', '', 'Vacant',
+       450000, 25, 7.2, 30, 8000, 0,
+       5400, 3, 1000, 3, 350, 3,
+       2000, 3, 400, 3,
+       5, 10, 3.5, 7, 5,
+       8.0, 8.0, 8.5, 28, 'Low', 'Glacial till, stable', 'Pacific Place, Westlake Center', 'Discovery Park, Volunteer Park',
+       47.6062, -122.3321)
     `)
 
     // Seed Reminders
@@ -199,4 +274,5 @@ export async function initDb() {
   } else {
     console.log('Existing RealPal database found. Seeding skipped.')
   }
+}
 }
