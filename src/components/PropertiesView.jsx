@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from 'react'
 
 export default function PropertiesView({ properties, onAddProperty, onUpdateProperty, onDeleteProperty }) {
-  const [activeSubTab, setActiveSubTab] = useState('portfolio') // 'portfolio', 'roi', 'compare'
+  // Navigation & Sub-tabs
+  const [activeSubTab, setActiveSubTab] = useState('portfolio') // 'portfolio' (Zillow Search Map), 'compare'
   
   // Selection states
-  const [selectedPropertyId, setSelectedPropertyId] = useState('')
+  const [selectedPropertyId, setSelectedPropertyId] = useState(null)
   const [comparedPropertyIds, setComparedPropertyIds] = useState([])
-  const [expandedPropertyId, setExpandedPropertyId] = useState(null)
+  const [activeDetailProp, setActiveDetailProp] = useState(null)
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('')
+  const [maxRentFilter, setMaxRentFilter] = useState('Any')
+  const [propertyTypeFilter, setPropertyTypeFilter] = useState('Any')
+  const [minBedsFilter, setMinBedsFilter] = useState('Any')
 
   // Modals & Forms
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingProperty, setEditingProperty] = useState(null)
   
-  // Property Form States (Upgraded with ROI & Zillow columns)
+  // Property Form States
   const [address, setAddress] = useState('')
   const [type, setType] = useState('Single Family')
   const [rent, setRent] = useState('')
@@ -101,8 +108,9 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     setEditingProperty(null)
   }
 
-  // Populate form with existing property details when editing
-  const handleStartEdit = (prop) => {
+  // Edit population
+  const handleStartEdit = (prop, e) => {
+    e.stopPropagation()
     setEditingProperty(prop)
     setAddress(prop.address)
     setType(prop.type)
@@ -143,6 +151,7 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     setForestPreserves(prop.forestPreserves ?? 'Alum Rock Park, Sierra Vista Open Space')
     setLatitude(prop.latitude ?? 37.3382)
     setLongitude(prop.longitude ?? -121.8863)
+    setShowAddModal(true)
   }
 
   const getFormData = () => {
@@ -189,28 +198,28 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     }
   }
 
-  const handleAddSubmit = async (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault()
     if (!address || !rent) return
-    await onAddProperty(getFormData())
+
+    if (editingProperty) {
+      await onUpdateProperty(editingProperty.id, getFormData())
+    } else {
+      await onAddProperty(getFormData())
+    }
     setShowAddModal(false)
     resetForm()
   }
 
-  const handleUpdateSubmit = async (e) => {
-    e.preventDefault()
-    if (!address || !rent) return
-    await onUpdateProperty(editingProperty.id, getFormData())
-    resetForm()
-  }
-
-  const handleDeleteProperty = (id) => {
+  const handleDeleteProperty = (id, e) => {
+    e.stopPropagation()
     if (confirm("Are you sure you want to remove this property? All associated tenant tracking will be cleared.")) {
       onDeleteProperty(id)
+      if (activeDetailProp?.id === id) setActiveDetailProp(null)
     }
   }
 
-  // ROI Calculation Engine (Matching calculator.net formulas)
+  // Financial Engine
   const calculateROI = (prop) => {
     const price = prop.purchasePrice || 320000
     const downPayment = price * ((prop.downPaymentPercent ?? 25) / 100)
@@ -259,12 +268,10 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     let cumulativeCashFlow = 0
 
     for (let y = 1; y <= years; y++) {
-      // Appreciation
       currentValue = currentValue * (1 + (prop.appreciationRatePercent ?? 3) / 100)
       
-      // Rent & Expenses inflation
       if (y > 1) {
-        currentRent = currentRent * (1 + (prop.crentincrease ?? 3) / 100)
+        currentRent = currentRent * (1 + 3 / 100) // Default 3% rent growth
         currentTax = currentTax * (1 + (prop.taxIncreasePercent ?? 3) / 100)
         currentInsurance = currentInsurance * (1 + (prop.insuranceIncreasePercent ?? 3) / 100)
         currentHOA = currentHOA * (1 + (prop.hoaIncreasePercent ?? 3) / 100)
@@ -280,7 +287,6 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
       const yCashFlow = yNOI - annualDebtService
       cumulativeCashFlow += yCashFlow
 
-      // Remaining Loan Balance
       let remainingBalance = 0
       const elapsedMonths = y * 12
       if (monthlyInterest > 0 && totalPayments > 0 && elapsedMonths < totalPayments) {
@@ -320,21 +326,27 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     }
   }
 
-  // Calculate lease progress percentage
-  const calculateLeaseProgress = (startStr, endStr) => {
-    if (!startStr || !endStr) return 0
-    const start = new Date(startStr).getTime()
-    const end = new Date(endStr).getTime()
-    const now = Date.now()
-    if (now < start) return 0
-    if (now > end) return 100
-    const total = end - start
-    const elapsed = now - start
-    return Math.round((elapsed / total) * 100)
-  }
+  // Filter listings
+  const filteredProperties = properties.filter(prop => {
+    // Search query match
+    if (searchQuery && !prop.address.toLowerCase().includes(searchQuery.toLowerCase())) return false
+    // Max rent match
+    if (maxRentFilter !== 'Any' && prop.rent > parseInt(maxRentFilter)) return false
+    // Home type match
+    if (propertyTypeFilter !== 'Any' && prop.type !== propertyTypeFilter) return false
+    return true
+  })
 
-  // Handle comparison selections
-  const toggleCompareSelect = (id) => {
+  // Set default details prop if null
+  useEffect(() => {
+    if (filteredProperties.length > 0 && !activeDetailProp) {
+      setActiveDetailProp(filteredProperties[0])
+    }
+  }, [filteredProperties, activeDetailProp])
+
+  // Compare listings
+  const toggleCompareSelect = (id, e) => {
+    e.stopPropagation()
     if (comparedPropertyIds.includes(id)) {
       setComparedPropertyIds(comparedPropertyIds.filter(pid => pid !== id))
     } else {
@@ -346,11 +358,8 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     }
   }
 
-  // Set calculator inputs when a property is loaded in the calculator tab
-  const handleLoadPropertyToCalculator = (propId) => {
-    const prop = properties.find(p => p.id === parseInt(propId))
-    if (!prop) return
-    setSelectedPropertyId(propId)
+  // ROI Calculator Ad-hoc calculation updates
+  const handleLoadPropertyToCalculator = (prop) => {
     setPurchasePrice(prop.purchasePrice ?? 320000)
     setDownPaymentPercent(prop.downPaymentPercent ?? 25)
     setInterestRate(prop.interestRate ?? 7.0)
@@ -374,637 +383,439 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
     setSellingCostPercent(prop.sellingCostPercent ?? 5)
   }
 
-  // Compute stats for current ad-hoc calculator state
-  const getActiveCalculatorStats = () => {
-    const mockProp = {
-      purchasePrice,
-      downPaymentPercent,
-      interestRate,
-      loanTermYears,
-      otherPurchaseCosts,
-      repairCost,
-      annualPropertyTax,
-      taxIncreasePercent,
-      annualInsurance,
-      insuranceIncreasePercent,
-      monthlyHOA,
-      hoaIncreasePercent,
-      annualMaintenance,
-      maintenanceIncreasePercent,
-      otherExpenses,
-      otherExpensesIncreasePercent,
-      vacancyRatePercent,
-      managementFeePercent,
-      appreciationRatePercent,
-      holdingPeriodYears,
-      sellingCostPercent,
-      rent: properties.find(p => p.id === parseInt(selectedPropertyId))?.rent || 2000
-    }
-    return calculateROI(mockProp)
-  }
-
-  // Print/Export Sheet
-  const handlePrintSheet = () => {
-    window.print()
-  }
+  const activeDetailFinancials = activeDetailProp ? calculateROI(activeDetailProp) : null
 
   return (
-    <div className="properties-view animate-fade-in">
+    <div className="zillow-platform-container animate-fade-in">
       
-      {/* Sub-tab view header */}
-      <div className="view-header no-print">
-        <div>
-          <h1 className="view-title text-gradient">Zillow Rentals & Financial Analyzer</h1>
-          <p className="view-description">Analyze property values, view neighborhood environments, calculate yields, and generate financial reports.</p>
+      {/* Zillow Top Brand Navigation Header */}
+      <header className="zillow-nav-header no-print">
+        <div className="nav-left">
+          <div className="zillow-brand-logo">RealPal</div>
+          <span className="rent-portal-tag">Rentals</span>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add Property
-        </button>
-      </div>
+        <nav className="nav-links">
+          <a href="#" className="active">Buy</a>
+          <a href="#">Rent</a>
+          <a href="#">Sell</a>
+          <a href="#">Home Loans</a>
+          <a href="#">Agent Finder</a>
+          <span className="divider"></span>
+          <a href="#" onClick={() => { setActiveSubTab('portfolio'); }}>🔍 Map Search</a>
+          <a href="#" onClick={() => { setActiveSubTab('compare'); }}>⚖️ Comparison Matrix ({comparedPropertyIds.length})</a>
+        </nav>
+        <div className="nav-right">
+          <button className="btn-zillow-primary" onClick={() => { resetForm(); setShowAddModal(true); }}>
+            ➕ Post Rental Listing
+          </button>
+        </div>
+      </header>
 
-      {/* Sub-Tab Navigation */}
-      <div className="sub-tabs-container no-print">
-        <button className={`sub-tab-btn ${activeSubTab === 'portfolio' ? 'active' : ''}`} onClick={() => setActiveSubTab('portfolio')}>
-          📂 Portfolio List
-        </button>
-        <button className={`sub-tab-btn ${activeSubTab === 'roi' ? 'active' : ''}`} onClick={() => { setActiveSubTab('roi'); if (properties.length > 0 && !selectedPropertyId) handleLoadPropertyToCalculator(properties[0].id); }}>
-          📊 ROI Calculator
-        </button>
-        <button className={`sub-tab-btn ${activeSubTab === 'compare' ? 'active' : ''}`} onClick={() => setActiveSubTab('compare')}>
-          ⚖️ Compare Sheet ({comparedPropertyIds.length}/3)
-        </button>
-      </div>
-
-      {/* PORTFOLIO TAB */}
+      {/* Sub-Header Zillow Filters Bar */}
       {activeSubTab === 'portfolio' && (
-        <>
-          {properties.length === 0 ? (
-            <div className="empty-properties-state glass-card no-print">
-              <div className="empty-icon">🏠</div>
-              <h3>No properties added yet</h3>
-              <p>Register your first property to view Zillow maps, nearby schools, environmental data, and compute cash flow yields.</p>
-              <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)}>Add Property Now</button>
+        <div className="zillow-filter-bar no-print">
+          <div className="search-input-wrapper">
+            <input 
+              type="text" 
+              placeholder="Address, neighborhood, ZIP..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="zillow-search-input"
+            />
+            <span className="search-icon">🔍</span>
+          </div>
+
+          <div className="filter-dropdown-group">
+            <div className="filter-select-wrapper">
+              <label>Max Rent</label>
+              <select value={maxRentFilter} onChange={(e) => setMaxRentFilter(e.target.value)} className="zillow-select">
+                <option value="Any">Any Price</option>
+                <option value="1500">$1,500/mo</option>
+                <option value="2500">$2,500/mo</option>
+                <option value="3500">$3,500/mo</option>
+                <option value="5000">$5,000/mo</option>
+              </select>
             </div>
-          ) : (
-            <div className="grid-3 no-print">
-              {properties.map((prop) => {
-                const isExpanded = expandedPropertyId === prop.id
-                const progress = calculateLeaseProgress(prop.leaseStart, prop.leaseEnd)
-                const financial = calculateROI(prop)
-                
-                const statusClass = 
-                  prop.status === 'Occupied' ? 'badge-success' :
-                  prop.status === 'Maintenance' ? 'badge-warning' : 'badge-danger'
 
-                return (
-                  <div key={prop.id} className="property-card glass-card">
-                    <div className="prop-card-header">
-                      <span className="property-type-tag">{prop.type}</span>
-                      <span className={`badge ${statusClass}`}>{prop.status}</span>
-                    </div>
-                    
-                    <h3 className="property-address">{prop.address}</h3>
-                    
-                    <div className="rent-ticker">
-                      <span className="rent-amount">${prop.rent.toLocaleString()}</span>
-                      <span className="rent-period">/ month</span>
-                    </div>
-
-                    <div className="small-financial-yields">
-                      <div className="yield-mini-badge">
-                        <span className="yield-lbl">Cap Rate</span>
-                        <span className="yield-val text-primary">{financial.capRate.toFixed(2)}%</span>
-                      </div>
-                      <div className="yield-mini-badge">
-                        <span className="yield-lbl">Cash-on-Cash</span>
-                        <span className="yield-val text-warning">{financial.cashOnCash.toFixed(2)}%</span>
-                      </div>
-                    </div>
-
-                    <div className="prop-divider"></div>
-
-                    <div className="tenant-details">
-                      <div className="details-row">
-                        <span className="detail-lbl">Tenant:</span>
-                        <span className="detail-val">{prop.tenantName}</span>
-                      </div>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="expanded-zillow-details animate-fade-in">
-                        <div className="prop-divider"></div>
-                        
-                        {/* Nearby Schools ratings */}
-                        <h4 className="expanded-section-title">🎓 GreatSchools™ Rating</h4>
-                        <div className="schools-rating-box">
-                          <div className="school-rating-bar">
-                            <span className="school-lbl">Elementary School</span>
-                            <div className="rating-track-wrapper">
-                              <div className="rating-track-fill" style={{ width: `${(prop.schoolElementary ?? 8) * 10}%` }}></div>
-                            </div>
-                            <span className="rating-num">{(prop.schoolElementary ?? 8.0).toFixed(1)}/10</span>
-                          </div>
-                          <div className="school-rating-bar">
-                            <span className="school-lbl">Middle School</span>
-                            <div className="rating-track-wrapper">
-                              <div className="rating-track-fill" style={{ width: `${(prop.schoolMiddle ?? 8) * 10}%` }}></div>
-                            </div>
-                            <span className="rating-num">{(prop.schoolMiddle ?? 8.0).toFixed(1)}/10</span>
-                          </div>
-                          <div className="school-rating-bar">
-                            <span className="school-lbl">High School</span>
-                            <div className="rating-track-wrapper">
-                              <div className="rating-track-fill" style={{ width: `${(prop.schoolHigh ?? 8) * 10}%` }}></div>
-                            </div>
-                            <span className="rating-num">{(prop.schoolHigh ?? 8.5).toFixed(1)}/10</span>
-                          </div>
-                        </div>
-
-                        {/* Environmental Hazards */}
-                        <div className="prop-divider"></div>
-                        <h4 className="expanded-section-title">🌱 Environment & Geography</h4>
-                        <div className="environ-info-grid">
-                          <div className="environ-card">
-                            <span className="env-title">Air Quality Index</span>
-                            <span className="env-val">{prop.airQualityIndex ?? 32} AQI (Good)</span>
-                          </div>
-                          <div className="environ-card">
-                            <span className="env-title">Wildfire Risk</span>
-                            <span className="env-val font-semibold text-warning">{prop.fireRisk ?? 'Low'}</span>
-                          </div>
-                          <div className="environ-card">
-                            <span className="env-title">Soil Framework</span>
-                            <span className="env-val">{prop.soilType ?? 'Clay loam, stable'}</span>
-                          </div>
-                        </div>
-
-                        {/* Malls & Parks */}
-                        <div className="prop-divider"></div>
-                        <h4 className="expanded-section-title">🛍️ Nearby Amenities</h4>
-                        <div className="amenities-box">
-                          <div className="amenity-row">
-                            <span className="amenity-lbl">Forest Preserves:</span>
-                            <span className="amenity-val">{prop.forestPreserves ?? 'None'}</span>
-                          </div>
-                          <div className="amenity-row">
-                            <span className="amenity-lbl">Shopping Malls:</span>
-                            <span className="amenity-val">{prop.mallsNearby ?? 'None'}</span>
-                          </div>
-                        </div>
-
-                        {/* Map placeholder */}
-                        <div className="prop-divider"></div>
-                        <h4 className="expanded-section-title">📍 Zillow Interactive Map Coordinates</h4>
-                        <div className="mock-map-box">
-                          <div className="mock-map-marker">📍</div>
-                          <div className="mock-map-details">
-                            <strong>Lat/Long:</strong> {prop.latitude ?? '37.33'}, {prop.longitude ?? '-121.88'}<br/>
-                            <span className="text-muted">Interactive Map Overlay (OpenStreetMap/Leaflet Layer Loaded)</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="card-actions">
-                      <button className="btn btn-secondary btn-sm" style={{ flex: 1.5 }} onClick={() => setExpandedPropertyId(isExpanded ? null : prop.id)}>
-                        {isExpanded ? 'Hide Zillow Info' : 'Zillow & environment'}
-                      </button>
-                      <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => handleStartEdit(prop)}>
-                        Edit
-                      </button>
-                      
-                      <button className={`btn btn-sm ${comparedPropertyIds.includes(prop.id) ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '0.5rem' }} onClick={() => toggleCompareSelect(prop.id)} title="Add to comparison sheet">
-                        ⚖️
-                      </button>
-
-                      <button className="btn btn-danger btn-sm" style={{ padding: '0.5rem' }} onClick={() => handleDeleteProperty(prop.id)}>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="filter-select-wrapper">
+              <label>Home Type</label>
+              <select value={propertyTypeFilter} onChange={(e) => setPropertyTypeFilter(e.target.value)} className="zillow-select">
+                <option value="Any">All Types</option>
+                <option value="Single Family">Single Family</option>
+                <option value="Multi Family">Multi Family</option>
+                <option value="Condo">Condo</option>
+                <option value="Apartment">Apartment</option>
+              </select>
             </div>
-          )}
-        </>
+          </div>
+
+          <div className="listing-count-tag">
+            {filteredProperties.length} Homes matching search
+          </div>
+        </div>
       )}
 
-      {/* ROI CALCULATOR TAB */}
-      {activeSubTab === 'roi' && (
-        <div className="roi-calculator-container">
-          {properties.length === 0 ? (
-            <div className="empty-properties-state glass-card no-print">
-              <div className="empty-icon">📊</div>
-              <h3>Please add a property first</h3>
-              <p>You need to have at least one property registered in your portfolio to compute ROI cash flow models.</p>
+      {/* PORTFOLIO SEARCH VIEW (SPLIT PANEL LAYOUT) */}
+      {activeSubTab === 'portfolio' && (
+        <div className="zillow-split-container">
+          
+          {/* Left Panel: Rental Listings Grid */}
+          <div className="zillow-left-listings-panel no-print">
+            <div className="listings-header">
+              <h2>Rental Listings</h2>
+              <div className="sort-by">Sort: <strong>Newest</strong></div>
             </div>
-          ) : (
-            <div className="calculator-layout-grid">
-              
-              {/* Left Column: Form Inputs (Hidden in Print) */}
-              <div className="calculator-inputs-column glass-card no-print">
-                <h3 className="section-title">Calculator Inputs</h3>
-                <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                  <label className="form-label font-bold">Select Portfolio Property</label>
-                  <select value={selectedPropertyId} onChange={(e) => handleLoadPropertyToCalculator(e.target.value)} className="form-select">
-                    {properties.map(p => (
-                      <option key={p.id} value={p.id}>{p.address}</option>
-                    ))}
-                  </select>
-                </div>
 
-                <div className="prop-divider"></div>
-
-                <div className="inputs-section">
-                  <h4 className="inputs-group-title">💰 Loan & Purchase</h4>
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Purchase Price ($)</label>
-                      <input type="number" value={purchasePrice} onChange={(e) => setPurchasePrice(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Down Payment (%)</label>
-                      <input type="number" value={downPaymentPercent} onChange={(e) => setDownPaymentPercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Interest Rate (%)</label>
-                      <input type="number" step="0.01" value={interestRate} onChange={(e) => setInterestRate(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Loan Term (Years)</label>
-                      <input type="number" value={loanTermYears} onChange={(e) => setLoanTermYears(parseInt(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Other Purchase Costs ($)</label>
-                      <input type="number" value={otherPurchaseCosts} onChange={(e) => setOtherPurchaseCosts(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Repair Costs ($)</label>
-                      <input type="number" value={repairCost} onChange={(e) => setRepairCost(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="inputs-section" style={{ marginTop: '1.5rem' }}>
-                  <h4 className="inputs-group-title">📈 Income, Fees & Appreciation</h4>
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Appreciation Rate (%/yr)</label>
-                      <input type="number" step="0.1" value={appreciationRatePercent} onChange={(e) => setAppreciationRatePercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Vacancy Rate (%)</label>
-                      <input type="number" value={vacancyRatePercent} onChange={(e) => setVacancyRatePercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Management Fee (%)</label>
-                      <input type="number" value={managementFeePercent} onChange={(e) => setManagementFeePercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Holding Period (Years)</label>
-                      <input type="number" value={holdingPeriodYears} onChange={(e) => setHoldingPeriodYears(parseInt(e.target.value) || 0)} className="form-input" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="inputs-section" style={{ marginTop: '1.5rem' }}>
-                  <h4 className="inputs-group-title">🛠️ Recurring Expenses & Growth Rates</h4>
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Property Tax ($/yr)</label>
-                      <input type="number" value={annualPropertyTax} onChange={(e) => setAnnualPropertyTax(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Tax Increase (%/yr)</label>
-                      <input type="number" value={taxIncreasePercent} onChange={(e) => setTaxIncreasePercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">HOI / Insurance ($/yr)</label>
-                      <input type="number" value={annualInsurance} onChange={(e) => setAnnualInsurance(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">HOI Increase (%/yr)</label>
-                      <input type="number" value={insuranceIncreasePercent} onChange={(e) => setInsuranceIncreasePercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Monthly HOA ($)</label>
-                      <input type="number" value={monthlyHOA} onChange={(e) => setMonthlyHOA(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">HOA Increase (%/yr)</label>
-                      <input type="number" value={hoaIncreasePercent} onChange={(e) => setHoaIncreasePercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Maintenance ($/yr)</label>
-                      <input type="number" value={annualMaintenance} onChange={(e) => setAnnualMaintenance(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Maint. Increase (%/yr)</label>
-                      <input type="number" value={maintenanceIncreasePercent} onChange={(e) => setMaintenanceIncreasePercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Other Expenses ($/yr)</label>
-                      <input type="number" value={otherExpenses} onChange={(e) => setOtherExpenses(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Other Increase (%/yr)</label>
-                      <input type="number" value={otherExpensesIncreasePercent} onChange={(e) => setOtherExpensesIncreasePercent(parseFloat(e.target.value) || 0)} className="form-input" />
-                    </div>
-                  </div>
-                </div>
-
-                <button type="button" className="btn btn-primary w-full" style={{ marginTop: '1.5rem' }} onClick={() => {
-                  const prop = properties.find(p => p.id === parseInt(selectedPropertyId))
-                  if (prop) {
-                    onUpdateProperty(prop.id, getFormData())
-                    alert("Property financials saved successfully!")
-                  }
-                }}>
-                  💾 Save Inputs to Property
-                </button>
+            {filteredProperties.length === 0 ? (
+              <div className="zillow-empty-state">
+                <span className="house-emoji">🏠</span>
+                <h3>No rental listings found</h3>
+                <p>Adjust your filters or add a new rental property to get started.</p>
+                <button className="btn-zillow-outline" onClick={() => setShowAddModal(true)}>Add Property</button>
               </div>
+            ) : (
+              <div className="zillow-listings-grid">
+                {filteredProperties.map(prop => {
+                  const isSelected = activeDetailProp?.id === prop.id
+                  const financials = calculateROI(prop)
+                  return (
+                    <div 
+                      key={prop.id} 
+                      className={`zillow-listing-card ${isSelected ? 'selected' : ''}`}
+                      onClick={() => { setActiveDetailProp(prop); handleLoadPropertyToCalculator(prop); }}
+                    >
+                      <div className="card-image-box">
+                        <div className="listing-type-badge">{prop.type}</div>
+                        <div className="occupancy-badge">{prop.status}</div>
+                        <div className="card-image-placeholder">🏠 RealPal Verified</div>
+                        <button className={`compare-bubble-btn ${comparedPropertyIds.includes(prop.id) ? 'active' : ''}`} onClick={(e) => toggleCompareSelect(prop.id, e)} title="Compare property">
+                          ⚖️
+                        </button>
+                      </div>
 
-              {/* Right Column: Calculations & Outputs Sheet (Print Target) */}
-              <div className="calculator-outputs-column glass-card print-sheet">
-                <div className="sheet-print-header">
-                  <h2>RealPal Financial Property Sheet</h2>
-                  <p className="address-lbl">{properties.find(p => p.id === parseInt(selectedPropertyId))?.address}</p>
-                  <p className="date-stamp">Generated: {new Date().toLocaleDateString()} | ROI model values</p>
+                      <div className="card-info-box">
+                        <div className="price-row">
+                          <span className="price">${prop.rent.toLocaleString()}<span className="mo">/mo</span></span>
+                        </div>
+                        <div className="details-row">
+                          <strong>{prop.type === 'Single Family' ? '3 bds' : '2 bds'}</strong> • <strong>2 ba</strong> • <strong>1,450 sqft</strong>
+                        </div>
+                        <div className="address">{prop.address}</div>
+
+                        <div className="zillow-mini-yields">
+                          <span className="yield-pill cap">Cap Rate: {financials.capRate.toFixed(2)}%</span>
+                          <span className="yield-pill coc">CoC: {financials.cashOnCash.toFixed(2)}%</span>
+                        </div>
+
+                        <div className="environmental-strip">
+                          <span className="env-pill aqi">🍃 AQI {prop.airQualityIndex ?? 32}</span>
+                          <span className="env-pill fire">🔥 {prop.fireRisk ?? 'Low'} Fire</span>
+                          <span className="env-pill school">🎓 School {(prop.schoolMiddle ?? 8.5).toFixed(1)}</span>
+                        </div>
+
+                        <div className="card-actions-strip">
+                          <button className="action-btn edit-btn" onClick={(e) => handleStartEdit(prop, e)}>Edit</button>
+                          <button className="action-btn delete-btn" onClick={(e) => handleDeleteProperty(prop.id, e)}>Delete</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right Panel: Detail Panel Drawer & Map */}
+          <div className="zillow-right-detail-panel">
+            
+            {activeDetailProp ? (
+              <div className="zillow-listing-details-sheet print-sheet">
+                
+                {/* Visual Header */}
+                <div className="sheet-image-gallery no-print">
+                  <div className="main-gallery-pic">
+                    <span className="realpal-guarantee-shield">🛡️ RealPal Guaranteed Rental Data</span>
+                    <span className="prop-addr-overlay">{activeDetailProp.address}</span>
+                  </div>
                 </div>
 
-                <div className="prop-divider print-only"></div>
-
-                {/* Core ROI yield cards */}
-                <div className="grid-3 yields-summary-cards">
-                  <div className="yield-card glass-card">
-                    <span className="card-lbl">Cap Rate</span>
-                    <span className="card-val text-primary">{getActiveCalculatorStats().capRate.toFixed(2)}%</span>
-                  </div>
-                  <div className="yield-card glass-card">
-                    <span className="card-lbl">Cash-on-Cash</span>
-                    <span className="card-val text-warning">{getActiveCalculatorStats().cashOnCash.toFixed(2)}%</span>
-                  </div>
-                  <div className="yield-card glass-card">
-                    <span className="card-lbl">Net Operating Income</span>
-                    <span className="card-val text-success">${Math.round(getActiveCalculatorStats().noi).toLocaleString()}/yr</span>
-                  </div>
+                <div className="sheet-header-print print-only">
+                  <h1>RealPal Property ROI & Environmental Sheet</h1>
+                  <p className="address">{activeDetailProp.address}</p>
+                  <p className="date">Generated: {new Date().toLocaleDateString()}</p>
                 </div>
 
-                <div className="prop-divider"></div>
-
-                {/* Cash Flow and Amortization details */}
-                <div className="grid-2 financial-details-grid">
-                  <div className="calc-sub-box">
-                    <h4>📥 Initial Cash Investment Breakdown</h4>
-                    <table className="financials-compact-table">
-                      <tbody>
-                        <tr><td>Down Payment ({downPaymentPercent}%)</td><td className="text-right font-bold">${Math.round(getActiveCalculatorStats().downPayment).toLocaleString()}</td></tr>
-                        <tr><td>Purchase Price</td><td className="text-right font-bold">${purchasePrice.toLocaleString()}</td></tr>
-                        <tr><td>Loan Amount ({100 - downPaymentPercent}%)</td><td className="text-right">${Math.round(getActiveCalculatorStats().loanAmount).toLocaleString()}</td></tr>
-                        <tr><td>Other Closing Costs</td><td className="text-right">${otherPurchaseCosts.toLocaleString()}</td></tr>
-                        <tr><td>Initial Repair Budget</td><td className="text-right">${repairCost.toLocaleString()}</td></tr>
-                        <tr className="border-t font-semibold"><td>Total Cash Invested</td><td className="text-right text-success">${Math.round(getActiveCalculatorStats().initialCash).toLocaleString()}</td></tr>
-                      </tbody>
-                    </table>
+                {/* Core Property Metrics */}
+                <div className="sheet-body-content">
+                  
+                  <div className="core-details-header">
+                    <div className="price-rent-block">
+                      <h2>${activeDetailProp.rent.toLocaleString()}/mo</h2>
+                      <p>{activeDetailProp.type} • Active Tenant: {activeDetailProp.tenantName}</p>
+                    </div>
+                    <div className="yields-header-block no-print">
+                      <div className="yield-header-metric">
+                        <span className="lbl">Cap Rate</span>
+                        <span className="val">{activeDetailFinancials.capRate.toFixed(2)}%</span>
+                      </div>
+                      <div className="yield-header-metric">
+                        <span className="lbl">Cash-on-Cash</span>
+                        <span className="val text-orange">{activeDetailFinancials.cashOnCash.toFixed(2)}%</span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="calc-sub-box">
-                    <h4>📤 Cash Flow & Expenses (Year 1)</h4>
-                    <table className="financials-compact-table">
-                      <tbody>
-                        <tr><td>Gross Rent (Monthly)</td><td className="text-right font-bold">${(properties.find(p => p.id === parseInt(selectedPropertyId))?.rent || 0).toLocaleString()}</td></tr>
-                        <tr><td>Vacancy Allowance ({vacancyRatePercent}%)</td><td className="text-right text-danger">-${Math.round(getActiveCalculatorStats().vacancyLoss / 12).toLocaleString()}</td></tr>
-                        <tr><td>Mortgage Payment (Monthly)</td><td className="text-right text-danger">-${Math.round(getActiveCalculatorStats().monthlyMortgage).toLocaleString()}</td></tr>
-                        <tr><td>Taxes & HOI (Monthly)</td><td className="text-right text-danger">-${Math.round((annualPropertyTax + annualInsurance) / 12).toLocaleString()}</td></tr>
-                        <tr><td>HOA & Maintenance (Monthly)</td><td className="text-right text-danger">-${Math.round(monthlyHOA + (annualMaintenance / 12)).toLocaleString()}</td></tr>
-                        <tr className="border-t font-semibold"><td>Net Monthly Cash Flow</td><td className="text-right text-warning">${Math.round(getActiveCalculatorStats().cashFlow / 12).toLocaleString()}/mo</td></tr>
-                      </tbody>
-                    </table>
+                  <div className="prop-divider"></div>
+
+                  {/* ROI Calculator Inputs & Variables */}
+                  <h3 className="section-title">📊 Acquisition & ROI Parameters</h3>
+                  <div className="calculator-two-col-grid">
+                    
+                    {/* Left Col: ROI values inputs */}
+                    <div className="calculator-inline-inputs no-print">
+                      <div className="form-grid-2">
+                        <div className="inline-form-group">
+                          <label>Purchase Price ($)</label>
+                          <input type="number" value={purchasePrice} onChange={(e) => { setPurchasePrice(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, purchasePrice: parseFloat(e.target.value) || 0}); }} />
+                        </div>
+                        <div className="inline-form-group">
+                          <label>Down Payment (%)</label>
+                          <input type="number" value={downPaymentPercent} onChange={(e) => { setDownPaymentPercent(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, downPaymentPercent: parseFloat(e.target.value) || 0}); }} />
+                        </div>
+                        <div className="inline-form-group">
+                          <label>Interest Rate (%)</label>
+                          <input type="number" step="0.01" value={interestRate} onChange={(e) => { setInterestRate(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, interestRate: parseFloat(e.target.value) || 0}); }} />
+                        </div>
+                        <div className="inline-form-group">
+                          <label>Loan Term (Yrs)</label>
+                          <input type="number" value={loanTermYears} onChange={(e) => { setLoanTermYears(parseInt(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, loanTermYears: parseInt(e.target.value) || 0}); }} />
+                        </div>
+                        <div className="inline-form-group">
+                          <label>Taxes ($/yr)</label>
+                          <input type="number" value={annualPropertyTax} onChange={(e) => { setAnnualPropertyTax(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, annualPropertyTax: parseFloat(e.target.value) || 0}); }} />
+                        </div>
+                        <div className="inline-form-group">
+                          <label>Insurance ($/yr)</label>
+                          <input type="number" value={annualInsurance} onChange={(e) => { setAnnualInsurance(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, annualInsurance: parseFloat(e.target.value) || 0}); }} />
+                        </div>
+                        <div className="inline-form-group">
+                          <label>Maintenance ($/yr)</label>
+                          <input type="number" value={annualMaintenance} onChange={(e) => { setAnnualMaintenance(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, annualMaintenance: parseFloat(e.target.value) || 0}); }} />
+                        </div>
+                        <div className="inline-form-group">
+                          <label>Appreciation (%/yr)</label>
+                          <input type="number" value={appreciationRatePercent} onChange={(e) => { setAppreciationRatePercent(parseFloat(e.target.value) || 0); onUpdateProperty(activeDetailProp.id, {...activeDetailProp, appreciationRatePercent: parseFloat(e.target.value) || 0}); }} />
+                        </div>
+                      </div>
+                      <p className="auto-save-tag">⚡ Inputs save to listing automatically</p>
+                    </div>
+
+                    {/* Right Col: ROI calculated table */}
+                    <div className="calculator-yields-table">
+                      <table className="compact-yields-table">
+                        <tbody>
+                          <tr><td>Initial Cash Invested</td><td className="text-right font-bold">${Math.round(activeDetailFinancials.initialCash).toLocaleString()}</td></tr>
+                          <tr><td>Monthly Mortgage (P&I)</td><td className="text-right text-red">-${Math.round(activeDetailFinancials.monthlyMortgage).toLocaleString()}/mo</td></tr>
+                          <tr><td>Taxes & HOI (Monthly)</td><td className="text-right text-red">-${Math.round((annualPropertyTax + annualInsurance) / 12).toLocaleString()}/mo</td></tr>
+                          <tr><td>Maintenance & Vacancy (Monthly)</td><td className="text-right text-red">-${Math.round((annualMaintenance + activeDetailFinancials.vacancyLoss) / 12).toLocaleString()}/mo</td></tr>
+                          <tr className="border-top"><td>Net Monthly Cash Flow</td><td className="text-right text-green font-bold">${Math.round(activeDetailFinancials.cashFlow / 12).toLocaleString()}/mo</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+
                   </div>
-                </div>
 
-                <div className="prop-divider"></div>
+                  <div className="prop-divider"></div>
 
-                {/* Projections Table */}
-                <h4 className="section-subtitle">📈 Multi-Year Value & Cash Flow Projections</h4>
-                <div className="table-responsive">
-                  <table className="projections-table">
-                    <thead>
-                      <tr>
-                        <th>Year</th>
-                        <th>Property Value</th>
-                        <th>Rental Income</th>
-                        <th>Expenses</th>
-                        <th>Cash Flow</th>
-                        <th>Loan Balance</th>
-                        <th>Equity</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {getActiveCalculatorStats().projections.map(proj => (
-                        <tr key={proj.year}>
-                          <td>Year {proj.year}</td>
-                          <td>${proj.value.toLocaleString()}</td>
-                          <td>${proj.income.toLocaleString()}</td>
-                          <td>${proj.expenses.toLocaleString()}</td>
-                          <td className={proj.cashFlow >= 0 ? 'text-success' : 'text-danger'}>
-                            ${proj.cashFlow.toLocaleString()}
-                          </td>
-                          <td>${proj.loanBalance.toLocaleString()}</td>
-                          <td className="font-bold text-success">${proj.equity.toLocaleString()}</td>
+                  {/* Multi-year projections */}
+                  <h3 className="section-title">📈 Multi-Year Growth Logs</h3>
+                  <div className="table-responsive">
+                    <table className="projections-table">
+                      <thead>
+                        <tr>
+                          <th>Year</th>
+                          <th>Property Value</th>
+                          <th>Annual Rent</th>
+                          <th>Expenses</th>
+                          <th>Cash Flow</th>
+                          <th>Equity</th>
                         </tr>
-                      ))}
+                      </thead>
+                      <tbody>
+                        {activeDetailFinancials.projections.map(proj => (
+                          <tr key={proj.year}>
+                            <td>Year {proj.year}</td>
+                            <td>${proj.value.toLocaleString()}</td>
+                            <td>${proj.income.toLocaleString()}</td>
+                            <td>${proj.expenses.toLocaleString()}</td>
+                            <td className={proj.cashFlow >= 0 ? 'text-green' : 'text-red'}>${proj.cashFlow.toLocaleString()}</td>
+                            <td className="text-green font-bold">${proj.equity.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="prop-divider"></div>
+
+                  {/* Environmental & Zillow Nearby Places */}
+                  <h3 className="section-title">🎓 GreatSchools™ Nearby Ratings</h3>
+                  <div className="schools-rating-grid">
+                    <div className="school-rating-bar">
+                      <span className="school-lbl">Elementary School</span>
+                      <div className="rating-track-wrapper"><div className="rating-track-fill" style={{ width: `${(activeDetailProp.schoolElementary ?? 8.5) * 10}%` }}></div></div>
+                      <span className="rating-num">{(activeDetailProp.schoolElementary ?? 8.5).toFixed(1)}/10</span>
+                    </div>
+                    <div className="school-rating-bar">
+                      <span className="school-lbl">Middle School</span>
+                      <div className="rating-track-wrapper"><div className="rating-track-fill" style={{ width: `${(activeDetailProp.schoolMiddle ?? 9.0) * 10}%` }}></div></div>
+                      <span className="rating-num">{(activeDetailProp.schoolMiddle ?? 9.0).toFixed(1)}/10</span>
+                    </div>
+                    <div className="school-rating-bar">
+                      <span className="school-lbl">High School</span>
+                      <div className="rating-track-wrapper"><div className="rating-track-fill" style={{ width: `${(activeDetailProp.schoolHigh ?? 8.8) * 10}%` }}></div></div>
+                      <span className="rating-num">{(activeDetailProp.schoolHigh ?? 8.8).toFixed(1)}/10</span>
+                    </div>
+                  </div>
+
+                  <div className="prop-divider"></div>
+
+                  <h3 className="section-title">🌱 Environment & Location Safety</h3>
+                  <table className="environmental-table">
+                    <tbody>
+                      <tr><td>Air Quality Index (AQI)</td><td><strong>{activeDetailProp.airQualityIndex ?? 32} AQI (Good)</strong></td></tr>
+                      <tr><td>Wildfire Hazard Level</td><td className="text-orange font-bold">{activeDetailProp.fireRisk ?? 'Low'}</td></tr>
+                      <tr><td>Soil Architecture</td><td>{activeDetailProp.soilType ?? 'Clay loam, stable'}</td></tr>
+                      <tr><td>Forest Preserves Nearby</td><td>{activeDetailProp.forestPreserves ?? 'None'}</td></tr>
+                      <tr><td>Shopping Malls Nearby</td><td>{activeDetailProp.mallsNearby ?? 'None'}</td></tr>
                     </tbody>
                   </table>
+
+                  {/* Action buttons */}
+                  <div className="drawer-action-strip no-print">
+                    <button className="btn-zillow-outline" onClick={() => window.print()}>
+                      🖨️ Export PDF Property Sheet
+                    </button>
+                  </div>
+
                 </div>
 
-                {/* Action button */}
-                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }} className="no-print">
-                  <button onClick={handlePrintSheet} className="btn btn-secondary btn-sm">
-                    🖨️ Export PDF Property Sheet
-                  </button>
-                </div>
               </div>
+            ) : (
+              <div className="no-detail-selected no-print">
+                <span className="search-logo-large">🔍</span>
+                <h3>Select a listing to view ROI sheets & environment reports</h3>
+              </div>
+            )}
 
-            </div>
-          )}
+          </div>
+
         </div>
       )}
 
-      {/* PROPERTY COMPARISON TAB */}
+      {/* COMPARISON MATRIX TAB */}
       {activeSubTab === 'compare' && (
-        <div className="property-comparison-container no-print">
+        <div className="zillow-compare-container no-print">
           {comparedPropertyIds.length === 0 ? (
-            <div className="empty-properties-state glass-card">
-              <div className="empty-icon">⚖️</div>
+            <div className="zillow-empty-state">
+              <span className="house-emoji">⚖️</span>
               <h3>No properties selected for comparison</h3>
-              <p>Go back to the <strong>Portfolio List</strong> tab and check the scale buttons (⚖️) on up to 3 cards to generate a comparison sheet.</p>
+              <p>Go back to the Search Listings view and click the scales button (⚖️) on up to 3 listings to compare them.</p>
             </div>
           ) : (
-            <div className="comparison-table-wrapper glass-card">
-              <h3 className="section-title" style={{ marginBottom: '1.5rem' }}>⚖️ Property Comparison Sheet</h3>
-              
-              <table className="compare-sheet-table">
+            <div className="zillow-compare-sheet glass-card">
+              <h2 className="section-title">⚖️ Side-by-Side Property Comparison Matrix</h2>
+              <table className="zillow-compare-table">
                 <thead>
                   <tr>
                     <th>Feature Metric</th>
                     {comparedPropertyIds.map(pid => {
                       const prop = properties.find(p => p.id === pid)
-                      return <th key={pid} className="text-center font-bold text-gradient">{prop?.address}</th>
+                      return <th key={pid} className="text-center">{prop?.address}</th>
                     })}
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🏡 Basic Details</td></tr>
+                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🏡 Listing Details</td></tr>
                   <tr>
-                    <td className="metric-lbl">Property Type</td>
+                    <td className="lbl">Type</td>
+                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.type}</td>)}
+                  </tr>
+                  <tr>
+                    <td className="lbl">Occupancy Status</td>
+                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.status}</td>)}
+                  </tr>
+
+                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>💰 ROI & Income Details</td></tr>
+                  <tr>
+                    <td className="lbl">Monthly Rent</td>
+                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold">${properties.find(p => p.id === pid)?.rent.toLocaleString()}</td>)}
+                  </tr>
+                  <tr>
+                    <td className="lbl">Purchase Price</td>
+                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold">${(properties.find(p => p.id === pid)?.purchasePrice ?? 320000).toLocaleString()}</td>)}
+                  </tr>
+                  <tr>
+                    <td className="lbl">Cap Rate</td>
                     {comparedPropertyIds.map(pid => {
                       const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center">{prop?.type}</td>
+                      const roi = calculateROI(prop)
+                      return <td key={pid} className="text-center font-bold text-blue">{roi.capRate.toFixed(2)}%</td>
                     })}
                   </tr>
                   <tr>
-                    <td className="metric-lbl">Status</td>
+                    <td className="lbl">Cash-on-Cash Return</td>
                     {comparedPropertyIds.map(pid => {
                       const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center">{prop?.status}</td>
+                      const roi = calculateROI(prop)
+                      return <td key={pid} className="text-center font-bold text-orange">{roi.cashOnCash.toFixed(2)}%</td>
                     })}
                   </tr>
 
-                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🎓 GreatSchools™ Ratings</td></tr>
+                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🎓 Schools ratings</td></tr>
                   <tr>
-                    <td className="metric-lbl">Elementary School</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center font-bold text-success">{(prop?.schoolElementary ?? 8).toFixed(1)}/10</td>
-                    })}
+                    <td className="lbl">Middle School</td>
+                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold text-green">{(properties.find(p => p.id === pid)?.schoolMiddle ?? 8.5).toFixed(1)}/10</td>)}
                   </tr>
                   <tr>
-                    <td className="metric-lbl">Middle School</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center font-bold text-success">{(prop?.schoolMiddle ?? 8).toFixed(1)}/10</td>
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="metric-lbl">High School</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center font-bold text-success">{(prop?.schoolHigh ?? 8.5).toFixed(1)}/10</td>
-                    })}
+                    <td className="lbl">High School</td>
+                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-bold text-green">{(properties.find(p => p.id === pid)?.schoolHigh ?? 8.5).toFixed(1)}/10</td>)}
                   </tr>
 
-                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🌱 Location Hazards & Environment</td></tr>
+                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>🌱 Location Hazards</td></tr>
                   <tr>
-                    <td className="metric-lbl">Air Quality Index</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center">{prop?.airQualityIndex ?? 32} AQI (Good)</td>
-                    })}
+                    <td className="lbl">Air Quality Index</td>
+                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center">{properties.find(p => p.id === pid)?.airQualityIndex ?? 32} AQI</td>)}
                   </tr>
                   <tr>
-                    <td className="metric-lbl">Wildfire Risk</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center text-warning font-semibold">{prop?.fireRisk ?? 'Low'}</td>
-                    })}
+                    <td className="lbl">Wildfire Risk</td>
+                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center text-orange font-bold">{properties.find(p => p.id === pid)?.fireRisk ?? 'Low'}</td>)}
                   </tr>
                   <tr>
-                    <td className="metric-lbl">Soil Context</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center">{prop?.soilType ?? 'Clay loam, stable'}</td>
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="metric-lbl">Malls Nearby</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center font-normal">{prop?.mallsNearby ?? 'None'}</td>
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="metric-lbl">Forest Preserves</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center font-normal">{prop?.forestPreserves ?? 'None'}</td>
-                    })}
-                  </tr>
-
-                  <tr className="section-row"><td colSpan={comparedPropertyIds.length + 1}>💰 ROI & Cash Yields (Year 1)</td></tr>
-                  <tr>
-                    <td className="metric-lbl">Purchase Price</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center font-bold">${(prop?.purchasePrice ?? 320000).toLocaleString()}</td>
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="metric-lbl">Monthly Rent</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      return <td key={pid} className="text-center font-bold">${(prop?.rent ?? 0).toLocaleString()}</td>
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="metric-lbl">Cap Rate</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      const stats = calculateROI(prop || {})
-                      return <td key={pid} className="text-center text-primary font-bold">{stats.capRate.toFixed(2)}%</td>
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="metric-lbl">Cash-on-Cash Return</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      const stats = calculateROI(prop || {})
-                      return <td key={pid} className="text-center text-warning font-bold">{stats.cashOnCash.toFixed(2)}%</td>
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="metric-lbl">NOI</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      const stats = calculateROI(prop || {})
-                      return <td key={pid} className="text-center text-success">${Math.round(stats.noi).toLocaleString()}/yr</td>
-                    })}
-                  </tr>
-                  <tr>
-                    <td className="metric-lbl">Monthly Cash Flow</td>
-                    {comparedPropertyIds.map(pid => {
-                      const prop = properties.find(p => p.id === pid)
-                      const stats = calculateROI(prop || {})
-                      return <td key={pid} className="text-center text-success">${Math.round(stats.cashFlow / 12).toLocaleString()}/mo</td>
-                    })}
+                    <td className="lbl">Malls Nearby</td>
+                    {comparedPropertyIds.map(pid => <td key={pid} className="text-center font-normal">{properties.find(p => p.id === pid)?.mallsNearby}</td>)}
                   </tr>
                 </tbody>
               </table>
-
-              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-                <button onClick={() => setComparedPropertyIds([])} className="btn btn-secondary btn-sm">Clear Selection</button>
+              
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+                <button onClick={() => setComparedPropertyIds([])} className="btn-zillow-outline">Clear Selections</button>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Add Property Modal */}
+      {/* Add / Edit Property Modal */}
       {showAddModal && (
-        <div className="modal-overlay">
+        <div className="modal-overlay no-print">
           <div className="modal-content">
             <button className="modal-close" onClick={() => { setShowAddModal(false); resetForm(); }}>×</button>
-            <h3 className="modal-title">Register Property</h3>
-            <p className="modal-subtitle">Register property parameters, Zillow locations, and initial ROI variables.</p>
+            <h3 className="modal-title">{editingProperty ? 'Edit Rental Listing' : 'Post New Rental Listing'}</h3>
+            <p className="modal-subtitle">Configure listing address, pricing, Zillow variables, and mortgage ROI parameters.</p>
             
-            <form onSubmit={handleAddSubmit} style={{ marginTop: '1.25rem' }} className="modal-scroll-form">
+            <form onSubmit={handleFormSubmit} style={{ marginTop: '1.25rem' }} className="modal-scroll-form">
+              
               <div className="form-group">
                 <label className="form-label">Property Street Address *</label>
                 <input
@@ -1046,7 +857,7 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
                 <label className="form-label">Tenant Full Name (Optional)</label>
                 <input
                   type="text"
-                  placeholder="Leave empty if vacant"
+                  placeholder="Vacant"
                   value={tenantName}
                   onChange={(e) => setTenantName(e.target.value)}
                   className="form-input"
@@ -1068,31 +879,13 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
 
                   <div className="grid-2">
                     <div className="form-group">
-                      <label className="form-label">Lease Start Date</label>
-                      <input
-                        type="date"
-                        value={leaseStart}
-                        onChange={(e) => setLeaseStart(e.target.value)}
-                        className="form-input"
-                      />
+                      <label className="form-label">Lease Start</label>
+                      <input type="date" value={leaseStart} onChange={(e) => setLeaseStart(e.target.value)} className="form-input" />
                     </div>
                     <div className="form-group">
-                      <label className="form-label">Lease End Date</label>
-                      <input
-                        type="date"
-                        value={leaseEnd}
-                        onChange={(e) => setLeaseEnd(e.target.value)}
-                        className="form-input"
-                      />
+                      <label className="form-label">Lease End</label>
+                      <input type="date" value={leaseEnd} onChange={(e) => setLeaseEnd(e.target.value)} className="form-input" />
                     </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Occupancy Status</label>
-                    <select value={status} onChange={(e) => setStatus(e.target.value)} className="form-select">
-                      <option value="Occupied">Occupied</option>
-                      <option value="Maintenance">Maintenance Required</option>
-                    </select>
                   </div>
                 </>
               )}
@@ -1118,270 +911,47 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
                   <input type="number" value={loanTermYears} onChange={(e) => setLoanTermYears(parseInt(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Other Closings ($)</label>
-                  <input type="number" value={otherPurchaseCosts} onChange={(e) => setOtherPurchaseCosts(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Repair Costs ($)</label>
-                  <input type="number" value={repairCost} onChange={(e) => setRepairCost(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Annual Taxes ($/yr)</label>
+                  <label className="form-label">Annual Property Tax ($)</label>
                   <input type="number" value={annualPropertyTax} onChange={(e) => setAnnualPropertyTax(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Annual Insurance ($/yr)</label>
+                  <label className="form-label">Annual Insurance ($)</label>
                   <input type="number" value={annualInsurance} onChange={(e) => setAnnualInsurance(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Monthly HOA ($)</label>
-                  <input type="number" value={monthlyHOA} onChange={(e) => setMonthlyHOA(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Annual Maintenance ($)</label>
                   <input type="number" value={annualMaintenance} onChange={(e) => setAnnualMaintenance(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
+                <div className="form-group">
+                  <label className="form-label">Appreciation Rate (%)</label>
+                  <input type="number" value={appreciationRatePercent} onChange={(e) => setAppreciationRatePercent(parseFloat(e.target.value) || 0)} className="form-input" />
+                </div>
               </div>
 
               <div className="prop-divider"></div>
-              <h4 className="modal-section-title">🎓 Schools & Environments</h4>
-
-              <div className="grid-3">
-                <div className="form-group">
-                  <label className="form-label">Elem. School (1-10)</label>
-                  <input type="number" step="0.1" min="1" max="10" value={schoolElementary} onChange={(e) => setSchoolElementary(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Middle School (1-10)</label>
-                  <input type="number" step="0.1" min="1" max="10" value={schoolMiddle} onChange={(e) => setSchoolMiddle(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">High School (1-10)</label>
-                  <input type="number" step="0.1" min="1" max="10" value={schoolHigh} onChange={(e) => setSchoolHigh(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-              </div>
-
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Air Quality Index (AQI)</label>
-                  <input type="number" value={airQualityIndex} onChange={(e) => setAirQualityIndex(parseInt(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Wildfire Risk</label>
-                  <select value={fireRisk} onChange={(e) => setFireRisk(e.target.value)} className="form-select">
-                    <option value="Very Low">Very Low</option>
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Soil Framework</label>
-                <input type="text" value={soilType} onChange={(e) => setSoilType(e.target.value)} className="form-input" placeholder="e.g. Clay loam, stable" />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Nearby Malls</label>
-                <input type="text" value={mallsNearby} onChange={(e) => setMallsNearby(e.target.value)} className="form-input" placeholder="e.g. Westfield, Third Street" />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Nearby Forest Preserves</label>
-                <input type="text" value={forestPreserves} onChange={(e) => setForestPreserves(e.target.value)} className="form-input" placeholder="e.g. Alum Rock Park" />
-              </div>
-
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Latitude</label>
-                  <input type="number" step="0.0001" value={latitude} onChange={(e) => setLatitude(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Longitude</label>
-                  <input type="number" step="0.0001" value={longitude} onChange={(e) => setLongitude(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { setShowAddModal(false); resetForm(); }}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 1.5 }}>
-                  Register Property
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Property Modal */}
-      {editingProperty && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <button className="modal-close" onClick={resetForm}>×</button>
-            <h3 className="modal-title">Edit Property Details</h3>
-            <p className="modal-subtitle">Modify parameters, ROI data, and Zillow environmental variables.</p>
-            
-            <form onSubmit={handleUpdateSubmit} style={{ marginTop: '1.25rem' }} className="modal-scroll-form">
-              <div className="form-group">
-                <label className="form-label">Property Street Address *</label>
-                <input
-                  type="text"
-                  required
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="form-input"
-                />
-              </div>
-
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Property Type</label>
-                  <select value={type} onChange={(e) => setType(e.target.value)} className="form-select">
-                    <option value="Single Family">Single Family</option>
-                    <option value="Multi Family">Multi Family</option>
-                    <option value="Condo">Condo</option>
-                    <option value="Apartment">Apartment</option>
-                    <option value="Townhouse">Townhouse</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Monthly Rent ($) *</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    value={rent}
-                    onChange={(e) => setRent(e.target.value)}
-                    className="form-input"
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Tenant Full Name</label>
-                <input
-                  type="text"
-                  placeholder="Vacant"
-                  value={tenantName}
-                  onChange={(e) => setTenantName(e.target.value)}
-                  className="form-input"
-                />
-              </div>
-
-              {tenantName && (
-                <>
-                  <div className="form-group">
-                    <label className="form-label">Tenant Email</label>
-                    <input
-                      type="email"
-                      placeholder="tenant@domain.com"
-                      value={tenantEmail}
-                      onChange={(e) => setTenantEmail(e.target.value)}
-                      className="form-input"
-                    />
-                  </div>
-
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label">Lease Start Date</label>
-                      <input
-                        type="date"
-                        value={leaseStart}
-                        onChange={(e) => setLeaseStart(e.target.value)}
-                        className="form-input"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Lease End Date</label>
-                      <input
-                        type="date"
-                        value={leaseEnd}
-                        onChange={(e) => setLeaseEnd(e.target.value)}
-                        className="form-input"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Occupancy Status</label>
-                    <select value={status} onChange={(e) => setStatus(e.target.value)} className="form-select">
-                      <option value="Occupied">Occupied</option>
-                      <option value="Maintenance">Maintenance Required</option>
-                    </select>
-                  </div>
-                </>
-              )}
-
-              <div className="prop-divider"></div>
-              <h4 className="modal-section-title">📊 Acquisition & ROI Parameters</h4>
+              <h4 className="modal-section-title">🎓 GreatSchools™ Nearby Ratings</h4>
               
-              <div className="grid-2">
+              <div className="grid-3">
                 <div className="form-group">
-                  <label className="form-label">Purchase Price ($)</label>
-                  <input type="number" value={purchasePrice} onChange={(e) => setPurchasePrice(parseFloat(e.target.value) || 0)} className="form-input" />
+                  <label className="form-label">Elem. (1-10)</label>
+                  <input type="number" step="0.1" value={schoolElementary} onChange={(e) => setSchoolElementary(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Down Payment (%)</label>
-                  <input type="number" value={downPaymentPercent} onChange={(e) => setDownPaymentPercent(parseFloat(e.target.value) || 0)} className="form-input" />
+                  <label className="form-label">Middle (1-10)</label>
+                  <input type="number" step="0.1" value={schoolMiddle} onChange={(e) => setSchoolMiddle(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Interest Rate (%)</label>
-                  <input type="number" step="0.01" value={interestRate} onChange={(e) => setInterestRate(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Loan Term (Years)</label>
-                  <input type="number" value={loanTermYears} onChange={(e) => setLoanTermYears(parseInt(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Other Closings ($)</label>
-                  <input type="number" value={otherPurchaseCosts} onChange={(e) => setOtherPurchaseCosts(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Repair Costs ($)</label>
-                  <input type="number" value={repairCost} onChange={(e) => setRepairCost(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Annual Taxes ($/yr)</label>
-                  <input type="number" value={annualPropertyTax} onChange={(e) => setAnnualPropertyTax(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Annual Insurance ($/yr)</label>
-                  <input type="number" value={annualInsurance} onChange={(e) => setAnnualInsurance(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Monthly HOA ($)</label>
-                  <input type="number" value={monthlyHOA} onChange={(e) => setMonthlyHOA(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Annual Maintenance ($)</label>
-                  <input type="number" value={annualMaintenance} onChange={(e) => setAnnualMaintenance(parseFloat(e.target.value) || 0)} className="form-input" />
+                  <label className="form-label">High (1-10)</label>
+                  <input type="number" step="0.1" value={schoolHigh} onChange={(e) => setSchoolHigh(parseFloat(e.target.value) || 0)} className="form-input" />
                 </div>
               </div>
 
               <div className="prop-divider"></div>
-              <h4 className="modal-section-title">🎓 Schools & Environments</h4>
-
-              <div className="grid-3">
-                <div className="form-group">
-                  <label className="form-label">Elem. School (1-10)</label>
-                  <input type="number" step="0.1" min="1" max="10" value={schoolElementary} onChange={(e) => setSchoolElementary(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Middle School (1-10)</label>
-                  <input type="number" step="0.1" min="1" max="10" value={schoolMiddle} onChange={(e) => setSchoolMiddle(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">High School (1-10)</label>
-                  <input type="number" step="0.1" min="1" max="10" value={schoolHigh} onChange={(e) => setSchoolHigh(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-              </div>
+              <h4 className="modal-section-title">🌱 Environment & Location Details</h4>
 
               <div className="grid-2">
                 <div className="form-group">
-                  <label className="form-label">Air Quality Index (AQI)</label>
+                  <label className="form-label">Air Quality Index</label>
                   <input type="number" value={airQualityIndex} onChange={(e) => setAirQualityIndex(parseInt(e.target.value) || 0)} className="form-input" />
                 </div>
                 <div className="form-group">
@@ -1410,385 +980,689 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
                 <input type="text" value={forestPreserves} onChange={(e) => setForestPreserves(e.target.value)} className="form-input" />
               </div>
 
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Latitude</label>
-                  <input type="number" step="0.0001" value={latitude} onChange={(e) => setLatitude(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Longitude</label>
-                  <input type="number" step="0.0001" value={longitude} onChange={(e) => setLongitude(parseFloat(e.target.value) || 0)} className="form-input" />
-                </div>
-              </div>
-
               <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
-                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={resetForm}>
+                <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={() => { setShowAddModal(false); resetForm(); }}>
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1.5 }}>
-                  Save Changes
+                  Publish Listing
                 </button>
               </div>
+
             </form>
           </div>
         </div>
       )}
 
-      {/* Styled Sheets & Projections Styles */}
+      {/* Styled sheets specific for Zillow design */}
       <style dangerouslySetInnerHTML={{__html: `
-        .sub-tabs-container {
-          display: flex;
-          gap: 0.5rem;
-          margin-bottom: 1.5rem;
-          border-bottom: 1px solid var(--border-color);
-          padding-bottom: 0.5rem;
+        :root {
+          --zillow-blue: #006aff;
+          --zillow-bg: #f6f6fa;
+          --zillow-border: #e4e4e7;
+          --zillow-text: #2a2a3e;
+          --zillow-text-secondary: #59596e;
         }
 
-        .sub-tab-btn {
-          background: transparent;
-          border: none;
-          color: var(--text-secondary);
-          padding: 0.6rem 1.2rem;
-          font-size: 0.9rem;
-          font-weight: 650;
-          cursor: pointer;
-          border-radius: var(--radius-md);
-          transition: all var(--transition-fast);
-        }
-
-        .sub-tab-btn:hover {
-          color: #fff;
-          background: rgba(255, 255, 255, 0.04);
-        }
-
-        .sub-tab-btn.active {
-          color: #fff;
-          background: rgba(255, 255, 255, 0.08);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-        }
-
-        .small-financial-yields {
-          display: flex;
-          gap: 0.75rem;
-          margin-bottom: 1rem;
-        }
-
-        .yield-mini-badge {
-          flex: 1;
+        .zillow-platform-container {
+          background-color: var(--zillow-bg);
+          color: var(--zillow-text);
+          min-height: 100vh;
+          font-family: 'Open Sans', 'Inter', sans-serif;
           display: flex;
           flex-direction: column;
+        }
+
+        /* Zillow Brand Navigation */
+        .zillow-nav-header {
+          display: flex;
+          justify-content: space-between;
           align-items: center;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          padding: 0.35rem;
-          border-radius: var(--radius-sm);
+          background: #fff;
+          border-bottom: 1px solid var(--zillow-border);
+          padding: 0.8rem 2rem;
+          height: 60px;
         }
 
-        .yield-mini-badge .yield-lbl {
-          font-size: 0.65rem;
-          color: var(--text-muted);
-          font-weight: 700;
-          text-transform: uppercase;
+        .zillow-brand-logo {
+          color: var(--zillow-blue);
+          font-size: 1.6rem;
+          font-weight: 900;
+          letter-spacing: -0.03em;
         }
 
-        .yield-mini-badge .yield-val {
-          font-size: 0.95rem;
-          font-weight: 800;
-        }
-
-        .expanded-zillow-details {
-          display: flex;
-          flex-direction: column;
-          gap: 0.85rem;
-          margin-bottom: 1rem;
-        }
-
-        .expanded-section-title {
-          font-size: 0.85rem;
-          font-weight: 800;
-          color: #fff;
-          text-transform: uppercase;
-          letter-spacing: 0.03em;
-        }
-
-        .schools-rating-box {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .school-rating-bar {
-          display: flex;
-          align-items: center;
-          font-size: 0.8rem;
-          gap: 0.5rem;
-        }
-
-        .school-lbl {
-          flex: 1.5;
-          color: var(--text-secondary);
-          font-weight: 600;
-        }
-
-        .rating-track-wrapper {
-          flex: 2;
-          height: 6px;
-          background: rgba(255, 255, 255, 0.08);
+        .rent-portal-tag {
+          font-size: 0.72rem;
+          background: rgba(0, 106, 255, 0.08);
+          color: var(--zillow-blue);
+          padding: 0.2rem 0.5rem;
           border-radius: var(--radius-full);
+          font-weight: 700;
+          margin-left: 0.5rem;
+          text-transform: uppercase;
+        }
+
+        .nav-links {
+          display: flex;
+          align-items: center;
+          gap: 1.5rem;
+        }
+
+        .nav-links a {
+          color: var(--zillow-text);
+          text-decoration: none;
+          font-size: 0.92rem;
+          font-weight: 600;
+          transition: color 0.15s;
+        }
+
+        .nav-links a:hover, .nav-links a.active {
+          color: var(--zillow-blue);
+        }
+
+        .nav-links .divider {
+          width: 1px;
+          height: 20px;
+          background: var(--zillow-border);
+        }
+
+        .btn-zillow-primary {
+          background: var(--zillow-blue);
+          color: #fff;
+          border: none;
+          padding: 0.6rem 1.2rem;
+          border-radius: var(--radius-md);
+          font-weight: 700;
+          cursor: pointer;
+          font-size: 0.9rem;
+          transition: background 0.2s;
+        }
+
+        .btn-zillow-primary:hover {
+          background: #0056cc;
+        }
+
+        /* Filter Bar */
+        .zillow-filter-bar {
+          display: flex;
+          align-items: center;
+          background: #fff;
+          border-bottom: 1px solid var(--zillow-border);
+          padding: 0.75rem 2rem;
+          gap: 1.5rem;
+        }
+
+        .search-input-wrapper {
+          position: relative;
+          width: 320px;
+        }
+
+        .zillow-search-input {
+          width: 100%;
+          border: 1px solid var(--zillow-border);
+          padding: 0.55rem 1rem 0.55rem 2.2rem;
+          border-radius: var(--radius-md);
+          font-size: 0.9rem;
+          outline: none;
+          color: var(--zillow-text);
+        }
+
+        .search-icon {
+          position: absolute;
+          left: 0.8rem;
+          top: 50%;
+          transform: translateY(-50%);
+          color: var(--zillow-text-secondary);
+        }
+
+        .filter-dropdown-group {
+          display: flex;
+          gap: 1rem;
+        }
+
+        .filter-select-wrapper {
+          display: flex;
+          flex-direction: column;
+          font-size: 0.72rem;
+          color: var(--zillow-text-secondary);
+          font-weight: 700;
+        }
+
+        .zillow-select {
+          border: 1px solid var(--zillow-border);
+          padding: 0.35rem 0.8rem;
+          border-radius: var(--radius-md);
+          outline: none;
+          font-size: 0.85rem;
+          background: #fff;
+          font-weight: 600;
+          color: var(--zillow-text);
+          margin-top: 2px;
+        }
+
+        .listing-count-tag {
+          margin-left: auto;
+          font-size: 0.88rem;
+          font-weight: 700;
+          color: var(--zillow-text-secondary);
+        }
+
+        /* Split Screen Container */
+        .zillow-split-container {
+          display: flex;
+          flex: 1;
+          height: calc(100vh - 110px);
           overflow: hidden;
         }
 
-        .rating-track-fill {
-          height: 100%;
-          background: linear-gradient(90deg, #ecc94b 0%, #48bb78 100%);
-          border-radius: var(--radius-full);
+        .zillow-left-listings-panel {
+          width: 55%;
+          overflow-y: auto;
+          padding: 1.5rem;
+          border-right: 1px solid var(--zillow-border);
+          background: #fff;
         }
 
-        .rating-num {
-          flex: 0.8;
-          text-align: right;
-          font-weight: 750;
-          color: #48bb78;
-        }
-
-        .environ-info-grid {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 0.5rem;
-        }
-
-        .environ-card {
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          padding: 0.5rem;
-          border-radius: var(--radius-sm);
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-        }
-
-        .env-title {
-          font-size: 0.65rem;
-          color: var(--text-muted);
-          margin-bottom: 0.2rem;
-          font-weight: 600;
-        }
-
-        .env-val {
-          font-size: 0.8rem;
-          font-weight: 700;
-          color: #fff;
-        }
-
-        .amenities-box {
-          display: flex;
-          flex-direction: column;
-          gap: 0.4rem;
-        }
-
-        .amenity-row {
+        .listings-header {
           display: flex;
           justify-content: space-between;
-          font-size: 0.8rem;
+          align-items: center;
+          margin-bottom: 1.25rem;
         }
 
-        .amenity-lbl {
-          color: var(--text-muted);
+        .listings-header h2 {
+          font-size: 1.35rem;
+          font-weight: 800;
+          color: var(--zillow-text);
+        }
+
+        .zillow-listings-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1.25rem;
+        }
+
+        .zillow-listing-card {
+          border: 1px solid var(--zillow-border);
+          border-radius: var(--radius-md);
+          overflow: hidden;
+          background: #fff;
+          cursor: pointer;
+          transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+        }
+
+        .zillow-listing-card:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-md);
+          border-color: var(--zillow-blue);
+        }
+
+        .zillow-listing-card.selected {
+          border-color: var(--zillow-blue);
+          box-shadow: 0 0 0 2px rgba(0, 106, 255, 0.15);
+        }
+
+        .card-image-box {
+          height: 140px;
+          background: linear-gradient(135deg, #006aff 0%, #a5b4fc 100%);
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .card-image-placeholder {
+          color: #fff;
+          font-weight: 750;
+          font-size: 0.95rem;
+          text-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        }
+
+        .listing-type-badge {
+          position: absolute;
+          left: 0.75rem;
+          top: 0.75rem;
+          background: rgba(0,0,0,0.65);
+          color: #fff;
+          padding: 0.25rem 0.5rem;
+          border-radius: var(--radius-sm);
+          font-size: 0.65rem;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        .occupancy-badge {
+          position: absolute;
+          right: 0.75rem;
+          top: 0.75rem;
+          background: #38a169;
+          color: #fff;
+          padding: 0.25rem 0.5rem;
+          border-radius: var(--radius-sm);
+          font-size: 0.65rem;
+          font-weight: 700;
+        }
+
+        .compare-bubble-btn {
+          position: absolute;
+          right: 0.75rem;
+          bottom: 0.75rem;
+          background: #fff;
+          border: 1px solid var(--zillow-border);
+          border-radius: var(--radius-full);
+          padding: 0.35rem;
+          cursor: pointer;
+          font-size: 0.75rem;
+          transition: all 0.15s;
+        }
+
+        .compare-bubble-btn:hover {
+          transform: scale(1.1);
+        }
+
+        .compare-bubble-btn.active {
+          background: var(--zillow-blue);
+          color: #fff;
+          border-color: var(--zillow-blue);
+        }
+
+        .card-info-box {
+          padding: 1rem;
+        }
+
+        .price-row .price {
+          font-size: 1.45rem;
+          font-weight: 850;
+          color: var(--zillow-text);
+        }
+
+        .price-row .mo {
+          font-size: 0.85rem;
+          color: var(--zillow-text-secondary);
           font-weight: 600;
         }
 
-        .amenity-val {
-          color: var(--text-primary);
+        .details-row {
+          font-size: 0.85rem;
+          color: var(--zillow-text-secondary);
+          margin-top: 0.25rem;
+        }
+
+        .address {
+          font-size: 0.9rem;
+          color: var(--zillow-text);
+          margin-top: 0.35rem;
           font-weight: 600;
-          max-width: 60%;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
-        .mock-map-box {
-          background: rgba(0, 0, 0, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: var(--radius-md);
-          padding: 0.75rem;
+        .zillow-mini-yields {
           display: flex;
-          align-items: center;
-          gap: 0.75rem;
+          gap: 0.5rem;
+          margin-top: 0.6rem;
         }
 
-        .mock-map-marker {
-          font-size: 1.5rem;
+        .yield-pill {
+          font-size: 0.68rem;
+          font-weight: 750;
+          padding: 0.2rem 0.4rem;
+          border-radius: var(--radius-sm);
         }
 
-        .mock-map-details {
-          font-size: 0.75rem;
-          line-height: 1.4;
-          color: var(--text-secondary);
+        .yield-pill.cap {
+          background: rgba(0, 106, 255, 0.08);
+          color: var(--zillow-blue);
         }
 
-        .modal-scroll-form {
-          max-height: 70vh;
+        .yield-pill.coc {
+          background: rgba(221, 107, 32, 0.08);
+          color: #dd6b20;
+        }
+
+        .environmental-strip {
+          display: flex;
+          gap: 0.4rem;
+          margin-top: 0.6rem;
+        }
+
+        .env-pill {
+          font-size: 0.65rem;
+          font-weight: 700;
+          padding: 0.15rem 0.35rem;
+          border-radius: var(--radius-sm);
+          background: #f7fafc;
+          border: 1px solid #edf2f7;
+          color: var(--zillow-text-secondary);
+        }
+
+        .card-actions-strip {
+          display: flex;
+          gap: 0.5rem;
+          margin-top: 0.85rem;
+          border-top: 1px solid #f4f4f5;
+          padding-top: 0.6rem;
+        }
+
+        .action-btn {
+          flex: 1;
+          background: transparent;
+          border: 1px solid var(--zillow-border);
+          padding: 0.35rem;
+          font-size: 0.78rem;
+          font-weight: 700;
+          border-radius: var(--radius-sm);
+          cursor: pointer;
+          color: var(--zillow-text-secondary);
+          transition: all 0.15s;
+        }
+
+        .action-btn:hover {
+          color: var(--zillow-text);
+          background: #f7fafc;
+        }
+
+        .delete-btn:hover {
+          border-color: #fc8181;
+          color: #e53e3e;
+          background: #fff5f5;
+        }
+
+        /* Right Panel: Detail Panel */
+        .zillow-right-detail-panel {
+          width: 45%;
+          background: #fff;
           overflow-y: auto;
-          padding-right: 0.5rem;
+          display: flex;
+          flex-direction: column;
         }
 
-        .modal-section-title {
-          font-size: 0.95rem;
+        .zillow-listing-details-sheet {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .sheet-image-gallery {
+          height: 220px;
+          background: linear-gradient(135deg, #1a202c 0%, #4a5568 100%);
+          position: relative;
+        }
+
+        .main-gallery-pic {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          justify-content: flex-end;
+          padding: 1.5rem;
+          background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+        }
+
+        .realpal-guarantee-shield {
+          position: absolute;
+          top: 1rem;
+          left: 1rem;
+          background: rgba(255,255,255,0.95);
+          color: var(--zillow-text);
+          font-size: 0.72rem;
           font-weight: 800;
-          color: #fff;
-          margin: 1.25rem 0 0.75rem 0;
-          text-transform: uppercase;
-          letter-spacing: 0.04em;
+          padding: 0.35rem 0.75rem;
+          border-radius: var(--radius-md);
+          box-shadow: var(--shadow-sm);
         }
 
-        /* ROI Calculator Styles */
-        .calculator-layout-grid {
+        .prop-addr-overlay {
+          color: #fff;
+          font-size: 1.45rem;
+          font-weight: 850;
+          text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .sheet-body-content {
+          padding: 1.5rem;
+        }
+
+        .core-details-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .price-rent-block h2 {
+          font-size: 1.85rem;
+          font-weight: 850;
+          color: var(--zillow-text);
+        }
+
+        .price-rent-block p {
+          color: var(--zillow-text-secondary);
+          font-size: 0.88rem;
+          margin-top: 0.2rem;
+        }
+
+        .yields-header-block {
+          display: flex;
+          gap: 1rem;
+        }
+
+        .yield-header-metric {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+        }
+
+        .yield-header-metric .lbl {
+          font-size: 0.65rem;
+          font-weight: 700;
+          color: var(--zillow-text-secondary);
+          text-transform: uppercase;
+        }
+
+        .yield-header-metric .val {
+          font-size: 1.35rem;
+          font-weight: 850;
+          color: var(--zillow-blue);
+        }
+
+        .yield-header-metric .val.text-orange {
+          color: #dd6b20;
+        }
+
+        .prop-divider {
+          height: 1px;
+          background: var(--zillow-border);
+          margin: 1.25rem 0;
+        }
+
+        .calculator-two-col-grid {
           display: grid;
-          grid-template-columns: 1.2fr 1.8fr;
+          grid-template-columns: 1.2fr 0.8fr;
           gap: 1.5rem;
           align-items: start;
         }
 
-        .calculator-inputs-column {
-          background: var(--bg-card);
-          padding: 1.5rem;
+        .calculator-inline-inputs {
+          background: #f7fafc;
+          border: 1px solid var(--zillow-border);
+          border-radius: var(--radius-md);
+          padding: 1rem;
         }
 
-        .calculator-outputs-column {
-          background: var(--bg-card);
-          padding: 1.75rem;
+        .form-grid-2 {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 0.75rem;
         }
 
-        .section-title {
-          font-size: 1.25rem;
-          font-weight: 800;
-          color: #fff;
-          margin-bottom: 1rem;
+        .inline-form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.2rem;
         }
 
-        .inputs-group-title {
+        .inline-form-group label {
+          font-size: 0.68rem;
+          color: var(--zillow-text-secondary);
+          font-weight: 750;
+        }
+
+        .inline-form-group input {
+          border: 1px solid var(--zillow-border);
+          border-radius: var(--radius-sm);
+          padding: 0.3rem 0.5rem;
+          font-size: 0.82rem;
+          outline: none;
+          color: var(--zillow-text);
+        }
+
+        .inline-form-group input:focus {
+          border-color: var(--zillow-blue);
+        }
+
+        .auto-save-tag {
+          font-size: 0.68rem;
+          color: #718096;
+          font-weight: 650;
+          margin-top: 0.75rem;
+          text-align: center;
+        }
+
+        .compact-yields-table {
+          width: 100%;
+          border-collapse: collapse;
           font-size: 0.85rem;
-          font-weight: 800;
-          color: var(--color-primary);
-          text-transform: uppercase;
-          margin-bottom: 0.85rem;
-          letter-spacing: 0.04em;
         }
 
-        .yields-summary-cards {
-          margin: 1.25rem 0;
+        .compact-yields-table td {
+          padding: 0.45rem 0;
+          border-bottom: 1px solid #edf2f7;
+          color: var(--zillow-text-secondary);
         }
 
-        .yield-card {
+        .compact-yields-table tr.border-top td {
+          border-top: 2px solid var(--zillow-text);
+          color: var(--zillow-text);
+          padding-top: 0.6rem;
+        }
+
+        .schools-rating-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 0.6rem;
+        }
+
+        .environmental-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.85rem;
+        }
+
+        .environmental-table td {
+          padding: 0.5rem 0;
+          border-bottom: 1px solid #edf2f7;
+          color: var(--zillow-text-secondary);
+        }
+
+        .environmental-table td:last-child {
+          color: var(--zillow-text);
+          text-align: right;
+        }
+
+        .drawer-action-strip {
+          margin-top: 1.5rem;
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .no-detail-selected {
+          flex: 1;
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding: 1rem;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          justify-content: center;
+          text-align: center;
+          padding: 4rem 2rem;
+        }
+
+        .search-logo-large {
+          font-size: 3.5rem;
+          color: #cbd5e0;
+          margin-bottom: 1rem;
+        }
+
+        .no-detail-selected h3 {
+          margin-bottom: 0.5rem;
+        }
+
+        .no-detail-selected p {
+          color: var(--zillow-text-secondary);
+        }
+
+        /* Zillow Compare Styles */
+        .zillow-compare-container {
+          padding: 2rem;
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+
+        .zillow-compare-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 0.88rem;
+          margin-top: 1rem;
+          background: #fff;
+          border: 1px solid var(--zillow-border);
           border-radius: var(--radius-md);
         }
 
-        .yield-card .card-lbl {
-          font-size: 0.75rem;
-          color: var(--text-muted);
-          font-weight: 700;
-          text-transform: uppercase;
-          margin-bottom: 0.35rem;
-        }
-
-        .yield-card .card-val {
-          font-size: 1.45rem;
-          font-weight: 850;
-        }
-
-        .calc-sub-box h4 {
-          font-size: 0.85rem;
-          font-weight: 800;
-          color: #fff;
-          margin-bottom: 0.75rem;
-          text-transform: uppercase;
-        }
-
-        .financials-compact-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 0.82rem;
-        }
-
-        .financials-compact-table td {
-          padding: 0.45rem 0;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-          color: var(--text-secondary);
-        }
-
-        .financials-compact-table tr.border-t td {
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
-          padding-top: 0.6rem;
-          color: #fff;
-        }
-
-        .projections-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 0.8rem;
-          margin-top: 0.75rem;
-        }
-
-        .projections-table th, .projections-table td {
-          padding: 0.6rem 0.5rem;
-          text-align: left;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .projections-table th {
-          background: rgba(255, 255, 255, 0.03);
-          color: var(--text-muted);
-          font-weight: 700;
-        }
-
-        .projections-table td {
-          color: var(--text-primary);
-        }
-
-        .compare-sheet-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 0.85rem;
-        }
-
-        .compare-sheet-table th, .compare-sheet-table td {
+        .zillow-compare-table th, .zillow-compare-table td {
           padding: 0.85rem 1rem;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          border-bottom: 1px solid var(--zillow-border);
         }
 
-        .compare-sheet-table th {
-          background: rgba(0, 0, 0, 0.2);
-          color: #fff;
+        .zillow-compare-table th {
+          background: #f7fafc;
+          font-weight: bold;
         }
 
-        .compare-sheet-table td {
-          color: var(--text-primary);
-        }
-
-        .compare-sheet-table tr.section-row td {
-          background: rgba(255, 255, 255, 0.03);
-          font-weight: 850;
-          color: #fff;
+        .zillow-compare-table tr.section-row td {
+          background: #edf2f7;
+          font-weight: 800;
           text-transform: uppercase;
-          font-size: 0.75rem;
+          font-size: 0.72rem;
           letter-spacing: 0.05em;
         }
 
-        .compare-sheet-table .metric-lbl {
-          font-weight: 750;
-          color: var(--text-muted);
-          width: 25%;
+        .btn-zillow-outline {
+          background: transparent;
+          border: 1px solid var(--zillow-blue);
+          color: var(--zillow-blue);
+          padding: 0.5rem 1rem;
+          border-radius: var(--radius-md);
+          font-weight: 700;
+          cursor: pointer;
+          font-size: 0.85rem;
+          transition: background 0.15s;
         }
 
-        /* Printable Sheet Styling (Print Media Override) */
-        .sheet-print-header {
+        .btn-zillow-outline:hover {
+          background: rgba(0, 106, 255, 0.04);
+        }
+
+        .zillow-empty-state {
+          text-align: center;
+          padding: 4rem 2rem;
+        }
+
+        .house-emoji {
+          font-size: 3rem;
+          margin-bottom: 1rem;
+          display: block;
+        }
+
+        /* Print Media Override */
+        .sheet-header-print {
           display: none;
         }
 
@@ -1804,71 +1678,33 @@ export default function PropertiesView({ properties, onAddProperty, onUpdateProp
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
-            color: #000 !important;
             background: #fff !important;
-            box-shadow: none !important;
-            border: none !important;
+            color: #000 !important;
             padding: 0 !important;
             margin: 0 !important;
+            border: none !important;
           }
-          .sheet-print-header {
+          .sheet-header-print {
             display: block !important;
             margin-bottom: 1.5rem;
-            color: #000 !important;
             border-bottom: 2px solid #000;
             padding-bottom: 0.5rem;
           }
-          .sheet-print-header h2 {
+          .sheet-header-print h1 {
             font-size: 20pt;
             font-weight: bold;
             margin: 0;
           }
-          .sheet-print-header .address-lbl {
+          .sheet-header-print .address {
             font-size: 14pt;
-            font-weight: 600;
-            margin: 4px 0 0 0;
+            margin: 4px 0;
           }
-          .sheet-print-header .date-stamp {
+          .sheet-header-print .date {
             font-size: 9pt;
             color: #555;
-            margin: 4px 0 0 0;
           }
           .no-print {
             display: none !important;
-          }
-          .yield-card {
-            background: #f7fafc !important;
-            border: 1px solid #cbd5e0 !important;
-            color: #000 !important;
-          }
-          .yield-card .card-val {
-            color: #000 !important;
-          }
-          .projections-table th {
-            background: #edf2f7 !important;
-            color: #000 !important;
-            border-bottom: 2px solid #cbd5e0 !important;
-          }
-          .projections-table td {
-            color: #000 !important;
-            border-bottom: 1px solid #e2e8f0 !important;
-          }
-          .financials-compact-table td {
-            color: #333 !important;
-            border-bottom: 1px solid #edf2f7 !important;
-          }
-          .financials-compact-table tr.border-t td {
-            border-top: 2px solid #000 !important;
-            color: #000 !important;
-          }
-          .text-success {
-            color: #2f855a !important;
-          }
-          .text-warning {
-            color: #c05621 !important;
-          }
-          .text-danger {
-            color: #9b2c2c !important;
           }
         }
       `}} />
