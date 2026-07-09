@@ -275,4 +275,3 @@ export async function initDb() {
     console.log('Existing RealPal database found. Seeding skipped.')
   }
 }
-}
